@@ -8,6 +8,22 @@ servers:
   - url: http://localhost:8080/api/v1
 
 paths:
+  # ──────────────── Health ────────────────
+  /ping:
+    get:
+      operationId: ping
+      summary: Health check
+      description: Returns pong if the application is running.
+      tags: [Health]
+      responses:
+        '200':
+          description: Application is up
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: pong
+
   # ──────────────── Authentication ────────────────
   /auth/register:
     post:
