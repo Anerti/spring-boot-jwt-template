@@ -38,7 +38,7 @@ public class ErrorBody {
                 response.getWriter(),
                 ErrorBody.builder()
                         .status(status.value())
-                        .error(status.getReasonPhrase())
+                        .error(status.getReasonPhrase().toUpperCase())
                         .message(message)
                         .build());
     }
