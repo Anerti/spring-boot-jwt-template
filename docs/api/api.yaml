@@ -9,11 +9,11 @@ servers:
 
 paths:
   # ──────────────── Health ────────────────
-  /ping:
+  /syn:
     get:
-      operationId: ping
+      operationId: syn
       summary: Health check
-      description: Returns pong if the application is running.
+      description: Returns syn-ack if the application is running.
       tags: [Health]
       responses:
         '200':
@@ -22,7 +22,7 @@ paths:
             text/plain:
               schema:
                 type: string
-              example: pong
+              example: syn-ack
 
   # ──────────────── Authentication ────────────────
   /auth/register:

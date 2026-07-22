@@ -7,8 +7,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class PingController {
 
-    @GetMapping("/ping")
-    public ResponseEntity<String> ping() {
-        return ResponseEntity.ok("pong");
+    @GetMapping("/syn")
+    public ResponseEntity<String> syn() {
+        return ResponseEntity.ok("syn-ack");
     }
 }
