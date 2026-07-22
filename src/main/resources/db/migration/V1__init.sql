@@ -1,7 +1,3 @@
--- ============================================================
--- Schema: spring-boot-jwt-template
--- ============================================================
-
 CREATE TYPE IF NOT EXISTS user_role AS ENUM ('admin', 'customer');
 
 CREATE TABLE IF NOT EXISTS "user" (
