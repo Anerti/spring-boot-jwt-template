@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class PingController {
+public class SynController {
 
     @GetMapping("/syn")
     public ResponseEntity<String> syn() {
