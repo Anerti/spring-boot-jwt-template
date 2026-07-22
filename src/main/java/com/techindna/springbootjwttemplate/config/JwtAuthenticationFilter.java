@@ -3,6 +3,7 @@ package com.techindna.springbootjwttemplate.config;
 import static java.util.List.of;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -48,7 +49,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         new UsernamePasswordAuthenticationToken(userId, null, authorities);
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (io.jsonwebtoken.JwtException ignored) {}
+            } catch (JwtException ignored) {}
         }
 
         filterChain.doFilter(request, response);
@@ -56,9 +57,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private String extractTokenFromHeader(HttpServletRequest request) {
         String header = request.getHeader("Authorization");
-        if (header != null && header.startsWith("Bearer ")) {
-            return header.substring(7);
-        }
-        return null;
+
+        return (header != null && header.startsWith("Bearer "))
+                ? header.substring(7) : null;
     }
 }
