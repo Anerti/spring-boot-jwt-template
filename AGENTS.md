@@ -35,7 +35,8 @@ docs/
 
 src/main/resources/
 ├── application.properties
-└── db/schema.sql         # PostgreSQL schema (users table)
+└── db/migration/
+    └── V1__init.sql           # Flyway: enum + user table
 ```
 
 ## Domain entities
@@ -46,7 +47,7 @@ src/main/resources/
 
 **Enum** `user_role`: `admin`, `customer`
 
-**Schema managed by**: `schema.sql` (no Hibernate auto-DDL, no Flyway)
+**Schema managed by**: Flyway (`db/migration/V1__init.sql`), schema `jwt_template_app` (set via `.env`)
 
 ## OpenAPI spec endpoints
 
@@ -101,4 +102,5 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew spotlessApply
 - **`.env` is gitignored**: secrets go in `.env`, never committed.
 - **`docs/` contains an Obsidian vault**: `.obsidian/` is gitignored.
 - **Partial implementation**: entity, exception, and mail service layers implemented. Controller and repository layers still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.
-- **Schema is manual**: `schema.sql` is the single source — no Flyway, no Hibernate DDL auto-generation.
+- **Schema is managed by Flyway**: `db/migration/V1__init.sql` is the source of truth. Never edit an applied migration — create a new one.
+- **Flyway migrations**: versioned as `V1__init.sql`, `V2__add_xxx.sql`, etc. Schema name set via `DB_SCHEMA` in `.env`.
