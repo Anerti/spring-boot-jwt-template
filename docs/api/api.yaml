@@ -46,15 +46,15 @@ paths:
                 $ref: '#/components/schemas/MessageBody'
               example:
                 message: A verification code has been sent to your email
-        '400':
+        '422':
           description: Validation failure
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
               example:
-                status: 400
-                error: Bad Request
+                status: 422
+                error: Unprocessable Entity
                 message: Password must be at least 8 characters
                 timestamp: 2026-07-20T15:00:00Z
         '409':
@@ -68,15 +68,15 @@ paths:
                 error: Conflict
                 message: Username is already taken
                 timestamp: 2026-07-20T15:00:00Z
-        '422':
+        '500':
           description: Failed to send verification email
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
               example:
-                status: 422
-                error: Unprocessable Entity
+                status: 500
+                error: Internal Server Error
                 message: Failed to send verification email
                 timestamp: 2026-07-20T15:00:00Z
 
@@ -158,15 +158,15 @@ paths:
                 $ref: '#/components/schemas/MessageBody'
               example:
                 message: A verification code has been sent to your email
-        '400':
+        '422':
           description: Validation failure
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
               example:
-                status: 400
-                error: Bad Request
+                status: 422
+                error: Unprocessable Entity
                 message: Username is required
                 timestamp: 2026-07-20T15:00:00Z
         '401':
@@ -180,15 +180,15 @@ paths:
                 error: Unauthorized
                 message: Invalid username or password
                 timestamp: 2026-07-20T15:00:00Z
-        '422':
+        '403':
           description: Business rule violation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
               example:
-                status: 422
-                error: Unprocessable Entity
+                status: 403
+                error: Forbidden
                 message: Account has been locked
                 timestamp: 2026-07-20T15:00:00Z
 
@@ -352,15 +352,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
-        '400':
+        '422':
           description: Validation failure
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
               example:
-                status: 400
-                error: Bad Request
+                status: 422
+                error: Unprocessable Entity
                 message: Email must be a valid email address
                 timestamp: 2026-07-20T15:00:00Z
         '404':
@@ -444,7 +444,7 @@ components:
       properties:
         username:
           type: string
-          maxLength: 100
+          maxLength: 50
         password:
           type: string
           minLength: 8
@@ -537,7 +537,7 @@ components:
           format: uuid
         username:
           type: string
-          maxLength: 100
+          maxLength: 50
         firstName:
           type: string
           maxLength: 100
@@ -573,7 +573,7 @@ components:
       properties:
         username:
           type: string
-          maxLength: 100
+          maxLength: 50
         password:
           type: string
           minLength: 8
