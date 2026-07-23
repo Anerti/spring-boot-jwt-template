@@ -3,21 +3,23 @@ package com.techindna.springbootjwttemplate.mapper;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.entity.enums.UserRole;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class AuthMapper {
 
     public JUser toEntity(RegisterInput request, String encodedPassword, String verificationCode) {
-        JUser user = new JUser();
-        user.setUsername(request.getUsername().strip());
-        user.setPassword(encodedPassword);
-        user.setFirstName(request.getFirstName().strip());
-        user.setLastName(request.getLastName().strip());
-        user.setEmail(request.getEmail().strip().toLowerCase());
-        user.setVerificationCode(verificationCode);
-        user.setVerified(false);
-        user.setRole(UserRole.CUSTOMER);
-        return user;
+        return JUser.builder()
+                .username(request.getUsername().strip())
+                .password(encodedPassword)
+                .firstName(request.getFirstName().strip())
+                .lastName(request.getLastName().strip())
+                .email(request.getEmail().strip().toLowerCase())
+                .verificationCode(verificationCode)
+                .verified(false)
+                .role(UserRole.CUSTOMER)
+                .build();
     }
 }
