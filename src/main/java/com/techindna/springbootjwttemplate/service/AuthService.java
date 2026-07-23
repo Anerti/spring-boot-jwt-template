@@ -22,6 +22,7 @@ public class AuthService {
 
     private static final String CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int CODE_LENGTH = 6;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final AuthRepository authRepository;
     private final AuthMapper authMapper;
@@ -34,17 +35,16 @@ public class AuthService {
         userValidator.validateRegistration(request);
         String encodedPassword = passwordEncoder.encode(request.getPassword());
         String code = generateCode();
+        String email = request.getEmail().strip().toLowerCase();
 
         try {
             authRepository.save(authMapper.toEntity(request, encodedPassword, code));
         } catch (DataIntegrityViolationException e) {
-            throw new ConflictException(String.format("Cannot use email %s or username %s", request.getEmail(), request.getUsername()));
+            throw new ConflictException("A user with that email or username already exists");
         }
 
-        emailService.sendMail(new EmailDetails(
-                request.getEmail(),
-                "Your verification code is: " + code,
-                "Email Verification"));
+        Thread.startVirtualThread(() -> emailService.sendMail(new EmailDetails(
+                email, "Your verification code is: " + code, "Email Verification")));
 
         return new MessageBody("A verification code has been sent to your email");
     }
@@ -52,7 +52,7 @@ public class AuthService {
     private static String generateCode() {
         StringBuilder sb = new StringBuilder(CODE_LENGTH);
         for (int i = 0; i < CODE_LENGTH; i++) {
-            sb.append(CODE_CHARS.charAt(new SecureRandom().nextInt(CODE_CHARS.length())));
+            sb.append(CODE_CHARS.charAt(SECURE_RANDOM.nextInt(CODE_CHARS.length())));
         }
         return sb.toString();
     }
