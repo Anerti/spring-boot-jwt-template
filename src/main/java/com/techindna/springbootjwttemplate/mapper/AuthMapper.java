@@ -14,7 +14,7 @@ public class AuthMapper {
         user.setPassword(encodedPassword);
         user.setFirstName(request.getFirstName().strip());
         user.setLastName(request.getLastName().strip());
-        user.setEmail(request.getEmail().strip());
+        user.setEmail(request.getEmail().strip().toLowerCase());
         user.setVerificationCode(verificationCode);
         user.setVerified(false);
         user.setRole(UserRole.CUSTOMER);
