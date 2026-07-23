@@ -37,7 +37,7 @@ public class DataValidator {
         checkNullData(field, value);
         checkStringLength(field, value, 100);
 
-        if (!EMAIL_FORMAT.matcher(value).matches()) {
+        if (!EMAIL_FORMAT.matcher(value.toLowerCase()).matches()) {
             throw new UnprocessableContentException(String.format("Email %s is not valid", value));
         }
     }
