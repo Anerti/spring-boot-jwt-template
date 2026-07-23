@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS jwt_template_app."user" (
     first_name VARCHAR(100) NOT NULL,
     last_name  VARCHAR(100) NOT NULL,
     email      VARCHAR(100) NOT NULL UNIQUE,
-    verification_code VARCHAR(6),
     verified   BOOLEAN     NOT NULL DEFAULT false,
     role       jwt_template_app.user_role NOT NULL DEFAULT 'CUSTOMER',
     created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),

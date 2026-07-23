@@ -29,6 +29,7 @@ public class AuthService {
     private final UserValidator userValidator;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final VerificationCodeStore verificationCodeStore;
 
     @Transactional
     public MessageBody register(RegisterInput request) {
@@ -38,8 +39,9 @@ public class AuthService {
         String email = request.getEmail().strip().toLowerCase();
 
         try {
-            authRepository.save(authMapper.toEntity(request, encodedPassword, code));
+            authRepository.save(authMapper.toEntity(request, encodedPassword));
             authRepository.flush();
+            verificationCodeStore.save(email, code);
         } catch (DataIntegrityViolationException e) {
             String constraint = e.getMostSpecificCause().getMessage();
             if (constraint != null && constraint.contains("email")) {

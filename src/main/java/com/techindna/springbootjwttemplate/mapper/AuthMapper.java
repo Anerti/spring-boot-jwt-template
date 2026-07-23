@@ -10,14 +10,13 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class AuthMapper {
 
-    public JUser toEntity(RegisterInput request, String encodedPassword, String verificationCode) {
+    public JUser toEntity(RegisterInput request, String encodedPassword) {
         return JUser.builder()
                 .username(request.getUsername().strip())
                 .password(encodedPassword)
                 .firstName(request.getFirstName().strip())
                 .lastName(request.getLastName().strip())
                 .email(request.getEmail().strip().toLowerCase())
-                .verificationCode(verificationCode)
                 .verified(false)
                 .role(UserRole.CUSTOMER)
                 .build();

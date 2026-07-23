@@ -43,9 +43,6 @@ public class JUser {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(name = "verification_code", length = 6)
-    private String verificationCode;
-
     @Column(nullable = false)
     @Builder.Default
     private Boolean verified = false;
