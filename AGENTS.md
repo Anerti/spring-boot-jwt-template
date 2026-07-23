@@ -103,7 +103,7 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew spotlessApply
 - **Error handling**: custom exceptions → `GlobalExceptionHandler` → JSON `ErrorBody` (status, error, message, timestamp)
 - **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
 - **JWT auth**: claim-based — extract `userId` + `role` from token, no `UserDetailsService`
-- **Async**: `ExecutorService.newVirtualThreadPerTaskExecutor()`, no `@Async`
+- **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
 - **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. ADMIN→CUSTOMER; self-only
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
 - **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`)
