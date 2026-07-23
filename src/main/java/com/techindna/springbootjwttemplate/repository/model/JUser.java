@@ -55,7 +55,7 @@ public class JUser {
     private Boolean verified = false;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(name = "role", nullable = false)
     @Builder.Default
     private UserRole role = UserRole.CUSTOMER;
 

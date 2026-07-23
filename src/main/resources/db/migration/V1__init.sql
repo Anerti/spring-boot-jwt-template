@@ -1,4 +1,4 @@
-CREATE TYPE IF NOT EXISTS user_role AS ENUM ('admin', 'customer');
+CREATE TYPE IF NOT EXISTS user_role AS ENUM ('ADMIN', 'CUSTOMER');
 
 CREATE TABLE IF NOT EXISTS "user" (
     id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS "user" (
     email      VARCHAR(100) NOT NULL UNIQUE,
     verification_code VARCHAR(6),
     verified   BOOLEAN     NOT NULL DEFAULT false,
-    role       user_role   NOT NULL DEFAULT 'customer',
+    role       user_role   NOT NULL DEFAULT 'CUSTOMER',
     created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ
 );
