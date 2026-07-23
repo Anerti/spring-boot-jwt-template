@@ -43,8 +43,8 @@ public class AuthService {
             throw new ConflictException("A user with that email or username already exists");
         }
 
-        Thread.startVirtualThread(() -> emailService.sendMail(new EmailDetails(
-                email, "Your verification code is: " + code, "Email Verification")));
+        emailService.sendMail(new EmailDetails(
+                email, "Your verification code is: " + code, "Email Verification"));
 
         return new MessageBody("A verification code has been sent to your email");
     }
