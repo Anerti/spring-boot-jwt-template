@@ -5,7 +5,7 @@ info:
   description: CRUD endpoints for user management and JWT authentication.
 
 servers:
-  - url: http://localhost:8080/api/v1
+  - url: http://localhost:8080
 
 paths:
   # ──────────────── Health ────────────────
