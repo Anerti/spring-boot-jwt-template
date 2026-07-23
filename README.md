@@ -136,7 +136,7 @@ touch src/main/resources/db/migration/V2__descriptive_name.sql
 
 ## API Endpoints
 
-Base URL: `http://localhost:8080/api/v1`
+Base URL: `http://localhost:8080`
 
 ### Authentication
 
@@ -183,4 +183,4 @@ src/main/resources/
 - **Error handling**: custom exceptions → `GlobalExceptionHandler` → JSON `ErrorBody`
 - **Async**: `ExecutorService.newVirtualThreadPerTaskExecutor()`, no `@Async`
 - **Pagination**: `{data: [...], meta: {page, size, total}}` (1-indexed)
-- **API prefix**: all endpoints under `/api/v1`
+- **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`)
