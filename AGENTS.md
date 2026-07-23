@@ -32,7 +32,7 @@ com.techindna.springbootjwttemplate
 ├── mapper/
 │   └── AuthMapper.java                    # RegisterInput → JUser
 ├── repository/
-│   ├── AuthRepository.java                # JPA + native queries
+│   ├── AuthRepository.java                # JPA repository
 │   └── model/
 │       └── JUser.java                     # JPA entity
 ├── service/
