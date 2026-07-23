@@ -447,7 +447,7 @@ components:
           maxLength: 50
         password:
           type: string
-          minLength: 8
+          minLength: 12
           maxLength: 255
           writeOnly: true
         confirmPassword:

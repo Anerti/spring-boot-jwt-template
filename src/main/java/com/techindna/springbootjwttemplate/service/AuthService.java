@@ -50,6 +50,7 @@ public class AuthService {
             if (constraint != null && constraint.contains("username")) {
                 throw new ConflictException("You cannot use this username");
             }
+            throw e;
         }
 
         emailService.sendMail(new EmailDetails(

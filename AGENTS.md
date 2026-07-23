@@ -2,13 +2,18 @@
 
 ## Stack
 
-Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring WebMVC · PostgreSQL · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
+Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring WebMVC · PostgreSQL · Redis · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
 
 ## Project structure
 
 ```
 com.techindna.springbootjwttemplate
 ├── SpringBootJwtTemplateApplication.java   # entry point
+├── config/
+│   ├── AsyncConfig.java                   # @EnableAsync + mailExecutor ThreadPoolTaskExecutor
+│   ├── JwtAuthenticationFilter.java       # JWT filter
+│   ├── JwtTokenProvider.java              # JWT create/parse
+│   └── SecurityConfig.java               # SecurityFilterChain, PasswordEncoder
 ├── controller/
 │   ├── AuthController.java                # POST /auth/register
 │   └── SynController.java                 # GET /syn
@@ -37,6 +42,7 @@ com.techindna.springbootjwttemplate
 │       └── JUser.java                     # JPA entity
 ├── service/
 │   ├── AuthService.java                   # register orchestration
+│   ├── VerificationCodeStore.java         # Redis-based verification code storage
 │   └── mail/
 │       ├── EmailService.java              # email service interface
 │       └── EmailSenderService.java        # email service implementation
@@ -51,18 +57,18 @@ docs/
 src/main/resources/
 ├── application.properties
 └── db/migration/
-    └── V1__init.sql           # Flyway: enum + user table
+    └── V1__init.sql           # native DDL: enum + user table
 ```
 
 ## Domain entities
 
 | Table    | Purpose                                   | Key columns                                                     |
 |----------|-------------------------------------------|-----------------------------------------------------------------|
-| `users`  | User accounts with JWT auth               | `id` (UUID PK), `username`, `email`, `password`, `role`, `verified`, `verification_code` |
+| `users`  | User accounts with JWT auth               | `id` (UUID PK), `username`, `email`, `password`, `role`, `verified` |
 
-**Enum** `user_role`: `admin`, `customer`
+**Enum** `user_role`: `ADMIN`, `CUSTOMER`
 
-**Schema managed by**: Flyway (`db/migration/V1__init.sql`), schema `jwt_template_app` (set via `.env`)
+**Schema**: native PostgreSQL DDL (`V1__init.sql`), schema `jwt_template_app` (set via `.env`). Applied manually, not via Flyway.
 
 ## OpenAPI spec endpoints
 
@@ -116,6 +122,5 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew spotlessApply
 - **JDK version**: system default is JDK 26 but Gradle 8.5+ rejects it. Always prefix with `JAVA_HOME=$HOME/.jdks/ms-21.0.11`. Never set `org.gradle.java.home` in `gradle.properties` (Gradle rejects it).
 - **`.env` is gitignored**: secrets go in `.env`, never committed.
 - **`docs/` contains an Obsidian vault**: `.obsidian/` is gitignored.
-- **Partial implementation**: entity, exception, mail service, and POST /auth/register implemented. GET /auth/verification, POST /auth/login, and users CRUD still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.
-- **Schema is managed by Flyway**: `db/migration/V1__init.sql` is the source of truth. Never edit an applied migration — create a new one.
-- **Flyway migrations**: versioned as `V1__init.sql`, `V2__add_xxx.sql`, etc. Schema name set via `DB_SCHEMA` in `.env`.
+- **Partial implementation**: POST /auth/register implemented. GET /auth/verification, POST /auth/login, and users CRUD still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.
+- **Schema is native DDL**: `db/migration/V1__init.sql` is the source of truth but is applied manually. Never edit it in-place — create a new SQL file for changes.
