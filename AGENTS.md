@@ -2,7 +2,7 @@
 
 ## Stack
 
-Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring WebMVC · PostgreSQL · Redis · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
+Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring WebMVC · PostgreSQL · Redis · Thymeleaf · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
 
 ## Project structure
 
@@ -56,8 +56,11 @@ docs/
 
 src/main/resources/
 ├── application.properties
-└── db/migration/
-    └── V1__init.sql           # native DDL: enum + user table
+├── db/migration/
+│   └── V1__init.sql           # native DDL: enum + user table
+└── templates/
+    └── mail/
+        └── verification.html   # Thymeleaf verification email template
 ```
 
 ## Domain entities

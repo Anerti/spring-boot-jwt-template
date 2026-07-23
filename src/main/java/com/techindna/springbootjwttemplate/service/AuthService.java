@@ -9,6 +9,7 @@ import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
 import com.techindna.springbootjwttemplate.validator.UserValidator;
 import java.security.SecureRandom;
+import java.util.Map;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -54,7 +55,16 @@ public class AuthService {
         }
 
         emailService.sendMail(new EmailDetails(
-                email, "Your verification code is: " + code, "Email Verification"));
+                email,
+                "Email Verification",
+                "mail/verification",
+                Map.of(
+                        "code", code,
+                        "firstName", request.getFirstName().strip(),
+                        "lastName", request.getLastName().strip(),
+                        "username", request.getUsername().strip(),
+                        "email", email
+                )));
 
         return new MessageBody("A verification code has been sent to your email");
     }
