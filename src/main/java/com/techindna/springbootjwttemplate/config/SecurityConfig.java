@@ -31,11 +31,11 @@ public class SecurityConfig {
                                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(
                         auth ->
-                                auth.requestMatchers("/api/v1/auth/**")
+                                auth.requestMatchers("/auth/**")
                                         .permitAll()
                                         .requestMatchers("/syn")
                                         .permitAll()
-                                        .requestMatchers("/api/v1/users/**")
+                                        .requestMatchers("/users/**")
                                         .authenticated()
                                         .anyRequest()
                                         .authenticated())
