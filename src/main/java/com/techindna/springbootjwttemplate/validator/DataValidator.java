@@ -14,13 +14,13 @@ public class DataValidator {
 
     public void checkNullData(String field, String value) {
         if (value == null || value.isBlank()) {
-            throw new UnprocessableContentException(field + " is required and cannot be blank");
+            throw new UnprocessableContentException(String.format("%s is required and cannot be blank", field));
         }
     }
 
     public void checkStringLength(String field, String value, int maxLength) {
         if (value != null && value.length() > maxLength) {
-            throw new UnprocessableContentException(field + " must not exceed " + maxLength + " characters");
+            throw new UnprocessableContentException(String.format("%s must not exceed %s characters", field, maxLength));
         }
     }
 
@@ -47,7 +47,7 @@ public class DataValidator {
         checkStringLength(field, value, 100);
 
         if (!NAME_FORMAT.matcher(value).matches()) {
-            throw new UnprocessableContentException(field + " must contain only letters, hyphens, apostrophes, and spaces");
+            throw new UnprocessableContentException(String.format("%s must start with a capital letter and contain only letters, hyphens, apostrophes, and spaces", field));
         }
     }
 

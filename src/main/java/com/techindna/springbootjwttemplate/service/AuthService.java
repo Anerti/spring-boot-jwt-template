@@ -39,8 +39,15 @@ public class AuthService {
 
         try {
             authRepository.save(authMapper.toEntity(request, encodedPassword, code));
+            authRepository.flush();
         } catch (DataIntegrityViolationException e) {
-            throw new ConflictException("A user with that email or username already exists");
+            String constraint = e.getMostSpecificCause().getMessage();
+            if (constraint != null && constraint.contains("email")) {
+                throw new ConflictException("You cannot use this email address");
+            }
+            if (constraint != null && constraint.contains("username")) {
+                throw new ConflictException("You cannot use this username");
+            }
         }
 
         emailService.sendMail(new EmailDetails(
