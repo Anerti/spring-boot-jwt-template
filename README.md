@@ -1,6 +1,6 @@
 # Spring Boot JWT Template
 
-A production-ready Spring Boot starter template with JWT authentication, user management, email verification, and PostgreSQL persistence.
+A production-ready Spring Boot starter template with JWT authentication, email verification, Redis-based verification code storage, and PostgreSQL persistence.
 
 ## Table of Contents
 
@@ -15,9 +15,10 @@ A production-ready Spring Boot starter template with JWT authentication, user ma
   - [3. Run](#3-run)
   - [4. Test](#4-test)
 - [Database](#database)
-  - [Flyway Migrations](#flyway-migrations)
+  - [Schema Management](#schema-management)
   - [Adding a Migration](#adding-a-migration)
 - [API Endpoints](#api-endpoints)
+  - [Health](#health)
   - [Authentication](#authentication)
   - [Users](#users)
 - [Architecture](#architecture)
@@ -28,7 +29,7 @@ A production-ready Spring Boot starter template with JWT authentication, user ma
 
 ## Stack
 
-Java 21 · Spring Boot 4.1.0 · Spring Data JPA · PostgreSQL · Flyway · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
+Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring Security · Spring WebMVC · Spring Mail · Thymeleaf · Redis · PostgreSQL · jjwt 0.12.6 · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
 
 ## Prerequisites
 
@@ -37,6 +38,7 @@ Java 21 · Spring Boot 4.1.0 · Spring Data JPA · PostgreSQL · Flyway · Lombo
 | Java | 21 | System default may be JDK 26 — always use the toolchain |
 | Gradle | 9.5.1+ | Bundled via `./gradlew` |
 | PostgreSQL | 14+ | Local or Neon/Supabase |
+| Redis | 7+ | Used for verification code storage (15 min TTL) |
 
 ## Configuration
 
@@ -51,14 +53,17 @@ Create a `.env` file with the following variables:
 spring.datasource.url=
 spring.datasource.username=
 spring.datasource.password=
-spring.flyway.schemas=
+spring.jpa.properties.hibernate.default_schema=
 
 # Mail (Gmail SMTP)
 spring.mail.username=
 spring.mail.password=
 
-# Schema init (optional)
-spring.sql.init.schema=
+# JWT
+app.jwt.secret=
+
+# Redis (Upstash — RESP-compatible)
+spring.data.redis.url=
 ```
 
 > **How it works:** Spring reads `.env` via `spring.config.import=optional:file:.env[.properties]`. Variable names match Spring property keys directly — no `${...}` placeholders needed in `application.properties`.
@@ -80,7 +85,7 @@ Host (`smtp.gmail.com`) and port (`587`) are configured in `application.properti
 ```bash
 git clone https://github.com/your-org/spring-boot-jwt-template.git
 cd spring-boot-jwt-template
-cp .env.example .env   # then fill in your credentials
+# Create .env with the variables listed below
 ```
 
 ### 2. Build
@@ -97,7 +102,7 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew build
 JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew bootRun
 ```
 
-The application starts on `http://localhost:8080`. Flyway runs automatically on first startup, creating the schema and applying migrations.
+The application starts on `http://localhost:8080`.
 
 ### 4. Test
 
@@ -107,43 +112,44 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew test
 
 ## Database
 
-### Flyway Migrations
+### Schema Management
 
-Schema management is handled by Flyway. Migrations live in:
+Schema is managed via native PostgreSQL DDL in `src/main/resources/db/migration/V1__init.sql`. The schema is applied manually — not via Flyway or any migration tool.
 
-```
-src/main/resources/db/migration/
-├── V1__init.sql          # enum + user table
-├── V2__add_xxx.sql       # future migrations
-```
-
-On startup, Flyway:
-1. Creates the schema if it does not exist (`spring.flyway.schemas`)
-2. Creates the `flyway_schema_history` table
-3. Applies all pending migrations in version order
+The DDL creates:
+- **Enum** `jwt_template_app.user_role`: `ADMIN`, `CUSTOMER`
+- **Table** `jwt_template_app."user"`: `id` (UUID PK), `username`, `email`, `password`, `first_name`, `last_name`, `verified`, `role`, `created_at`, `updated_at`
 
 ### Adding a Migration
 
 ```bash
-# Create a new versioned migration file
+# Create a new SQL file for schema changes
 touch src/main/resources/db/migration/V2__descriptive_name.sql
 ```
 
 **Rules:**
-- Never edit an already-applied migration — create a new one
+- Never edit an already-applied migration — create a new file
 - File naming: `V{version}__{description}.sql` (two underscores before description)
-- All objects are created in the schema defined by `spring.flyway.schemas`
+- All objects are created in the schema defined by `spring.jpa.properties.hibernate.default_schema` (set via `.env`)
 
 ## API Endpoints
 
 Base URL: `http://localhost:8080`
+
+Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
+
+### Health
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/syn` | — | Health check → 200 with `syn-ack` |
 
 ### Authentication
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/auth/register` | — | Register → 202, sends verification code by email |
-| GET | `/auth/verification` | — | Verify code → 200 with JWT token |
+| GET | `/auth/verification?code=...` | — | Verify code → 200 with JWT token |
 | POST | `/auth/login` | — | Login → 202, sends verification code by email |
 
 ### Users
@@ -155,32 +161,75 @@ Base URL: `http://localhost:8080`
 | PUT | `/users/{userId}` | JWT | Update user |
 | DELETE | `/users/{userId}` | JWT | Delete user |
 
-Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
-
 ## Architecture
 
 ### Project Structure
 
 ```
 src/main/java/com/techindna/springbootjwttemplate/
-├── SpringBootJwtTemplateApplication.java
-├── entity/                    # Domain records
-├── exception/                 # Custom exceptions + GlobalExceptionHandler
-├── repository/model/          # JPA entities (J-prefix)
-└── service/mail/              # Email service (interface + impl)
+├── SpringBootJwtTemplateApplication.java   # entry point
+├── config/
+│   ├── AsyncConfig.java                    # @EnableAsync + mailExecutor ThreadPoolTaskExecutor
+│   ├── JwtAuthenticationFilter.java        # JWT filter
+│   ├── JwtTokenProvider.java               # JWT create/parse
+│   └── SecurityConfig.java                 # SecurityFilterChain, PasswordEncoder
+├── controller/
+│   ├── AuthController.java                 # POST /auth/register
+│   └── SynController.java                  # GET /syn
+├── dto/
+│   ├── MessageBody.java                    # { message } response
+│   └── RegisterInput.java                  # register request body
+├── entity/
+│   ├── User.java                           # domain record
+│   ├── email/EmailDetails.java             # email details entity
+│   └── enums/UserRole.java                 # user role enum
+├── exception/
+│   ├── ErrorBody.java                      # error response DTO
+│   ├── GlobalExceptionHandler.java         # centralized error handling
+│   └── http/                               # HTTP exception classes
+│       ├── BadRequestException.java        # 400
+│       ├── ConflictException.java          # 409
+│       ├── ForbiddenException.java         # 403
+│       ├── NotFoundException.java          # 404
+│       ├── UnauthorizedException.java      # 401
+│       └── UnprocessableContentException.java  # 422
+├── mapper/
+│   └── AuthMapper.java                     # RegisterInput → JUser
+├── repository/
+│   ├── AuthRepository.java                 # JPA repository
+│   └── model/
+│       └── JUser.java                      # JPA entity
+├── service/
+│   ├── AuthService.java                    # register orchestration
+│   ├── VerificationCodeStore.java          # Redis-based verification code storage
+│   └── mail/
+│       ├── EmailService.java               # email service interface
+│       └── EmailSenderService.java         # email service implementation
+└── validator/
+    ├── DataValidator.java                  # low-level format checks
+    └── UserValidator.java                  # registration rules
 
 src/main/resources/
-├── application.properties     # Non-sensitive config
-├── db/migration/              # Flyway SQL migrations
-└── .env (gitignored)          # Secrets
+├── application.properties
+├── db/migration/
+│   └── V1__init.sql                        # native DDL: enum + user table
+└── templates/
+    └── mail/
+        └── verification.html               # Thymeleaf verification email template
 ```
 
 ### Conventions
 
 - **IDs**: UUIDs everywhere (`gen_random_uuid()`, `java.util.UUID`)
-- **Layer naming**: J-prefix for JPA entities (`JUser`), domain records in `entity/`
-- **Validation**: `DataValidator` pattern (void return, throws `UnprocessableContentException`), not `@Valid`
-- **Error handling**: custom exceptions → `GlobalExceptionHandler` → JSON `ErrorBody`
-- **Async**: `ExecutorService.newVirtualThreadPerTaskExecutor()`, no `@Async`
-- **Pagination**: `{data: [...], meta: {page, size, total}}` (1-indexed)
+- **Layer naming**: J-prefix for JPA entities (`JUser`), domain records in `entity/`, Lombok `@Getter @Setter @NoArgsConstructor`
+- **Validation**: `DataValidator` pattern (void return, throws `UnprocessableContentException` (422)), not `@Valid`
+- **Error handling**: custom exceptions → `GlobalExceptionHandler` → JSON `ErrorBody` (status, error, message, timestamp)
+- **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
+- **JWT auth**: claim-based — extract `userId` + `role` from token, no `UserDetailsService`
+- **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
+- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. ADMIN→CUSTOMER; self-only
+- **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
 - **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`)
+- **Docs language**: English for API descriptions, French for user-facing instructions
+- **Commits**: one commit per logical change, conventional format
+- **Code style**: English-only, no comments/docstrings, short focused functions, explicit constructors over `@AllArgsConstructor`
