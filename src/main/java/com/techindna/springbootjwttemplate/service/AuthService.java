@@ -1,12 +1,14 @@
 package com.techindna.springbootjwttemplate.service;
 
 import com.techindna.springbootjwttemplate.config.JwtTokenProvider;
+import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.entity.User;
 import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
+import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.GoneException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
 import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
@@ -22,6 +24,8 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -72,10 +76,7 @@ public class AuthService {
             throw e;
         }
 
-        String verificationUrl = String.format("%s/auth/verification?code=%s&email=%s",
-                baseUrl,
-                URLEncoder.encode(code, StandardCharsets.UTF_8),
-                URLEncoder.encode(email, StandardCharsets.UTF_8));
+        String verificationUrl = buildVerificationUrl(code, email);
 
         emailService.sendMail(new EmailDetails(
                 email,
@@ -91,6 +92,50 @@ public class AuthService {
                 )));
 
         return new MessageBody("An email has been sent to verify your account");
+    }
+
+    @Transactional
+    public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
+        userValidator.validateLogin(request);
+
+        JUser jUser = request.getEmail() != null ?
+                authRepository.findByEmail(request.getEmail())
+                        .orElseThrow(() -> new UnauthorizedException("Invalid credentials")) :
+                authRepository.findByUsername(request.getUsername().strip())
+                        .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+
+        if (!passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
+            throw new UnauthorizedException("Invalid credentials");
+        }
+
+        if (!jUser.getVerified()) {
+            throw new ForbiddenException("Account has not been verified");
+        }
+
+        String email = jUser.getEmail();
+        String code = generateCode();
+        verificationCodeStore.save(email, code);
+
+        String verificationUrl = buildVerificationUrl(code, email);
+
+        String clientIp = servletRequest.getHeader("X-Forwarded-For");
+        if (clientIp == null || clientIp.isBlank()) {
+            clientIp = servletRequest.getRemoteAddr();
+        }
+        String userAgent = servletRequest.getHeader("User-Agent");
+
+        emailService.sendMail(new EmailDetails(
+                email,
+                "Login Verification",
+                "mail/login-verification",
+                Map.of(
+                        "verificationUrl", verificationUrl,
+                        "code", code,
+                        "clientIp", clientIp,
+                        "userAgent", userAgent != null ? userAgent : "Unknown"
+                )));
+
+        return new MessageBody("A verification code has been sent to your email");
     }
 
     @Transactional
@@ -126,5 +171,12 @@ public class AuthService {
             sb.append(CODE_CHARS.charAt(SECURE_RANDOM.nextInt(CODE_CHARS.length())));
         }
         return sb.toString();
+    }
+
+    private String buildVerificationUrl(String code, String email) {
+        return String.format("%s/auth/verification?code=%s&email=%s",
+                baseUrl,
+                URLEncoder.encode(code, StandardCharsets.UTF_8),
+                URLEncoder.encode(email, StandardCharsets.UTF_8));
     }
 }
