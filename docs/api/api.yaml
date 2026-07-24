@@ -200,6 +200,64 @@ paths:
                 message: Account has been locked
                 timestamp: 2026-07-20T15:00:00Z
 
+  /auth/resend-code:
+    post:
+      operationId: resendVerificationCode
+      summary: Resend verification code
+      description: Generates a new 6-char verification code (A-Z0-9) and sends it by email. Use this when the previous code expired or was not received. The code expires after 15 minutes.
+      tags: [Auth]
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+            maxLength: 100
+          description: Email address of the account to resend the verification code to
+      responses:
+        '202':
+          description: Verification code regenerated and sent by email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageBody'
+              example:
+                message: A verification code has been sent to your email
+        '422':
+          description: Email format validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 422
+                error: Unprocessable Entity
+                message: Email must be a valid email address
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Email not found or account already verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: No pending verification found for this email
+                timestamp: 2026-07-20T15:00:00Z
+        '500':
+          description: Failed to send verification email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 500
+                error: Internal Server Error
+                message: Failed to send verification email
+                timestamp: 2026-07-20T15:00:00Z
+
   # ──────────────── Users CRUD ────────────────
   /users:
     get:
