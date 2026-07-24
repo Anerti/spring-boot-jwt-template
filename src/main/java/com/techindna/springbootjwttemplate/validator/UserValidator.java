@@ -13,12 +13,17 @@ public class UserValidator {
     private final DataValidator dataValidator;
 
     public void validateLogin(LoginInput request) {
-        dataValidator.checkNullData("password", request.getPassword());
-
-        if ((request.getUsername() == null || request.getUsername().isBlank())
-                && (request.getEmail() == null || request.getEmail().isBlank())) {
+        if (request.getEmail() != null && !request.getEmail().isBlank()) {
+            dataValidator.validateEmail("email", request.getEmail());
+        }
+        if (request.getUsername() != null && !request.getUsername().isBlank()){
+            dataValidator.validateUsername(request.getUsername());
+        }
+        if ((request.getUsername() == null || request.getUsername().isBlank()) && (request.getEmail() == null || request.getEmail().isBlank())){
             throw new UnprocessableContentException("Username or email is required and cannot be blank");
         }
+
+        dataValidator.checkNullData("password", request.getPassword());
     }
 
     public void validateRegistration(RegisterInput request) {
