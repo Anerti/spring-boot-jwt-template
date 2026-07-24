@@ -94,12 +94,12 @@ public class AuthService {
         return new MessageBody("An email has been sent to verify your account");
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
         userValidator.validateLogin(request);
 
-        JUser jUser = request.getEmail() != null ?
-                authRepository.findByEmail(request.getEmail())
+        JUser jUser = request.getEmail() != null && !request.getEmail().isBlank() ?
+                authRepository.findByEmail(request.getEmail().strip().toLowerCase())
                         .orElseThrow(() -> new UnauthorizedException("Invalid credentials")) :
                 authRepository.findByUsername(request.getUsername().strip())
                         .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
