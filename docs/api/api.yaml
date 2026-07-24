@@ -186,7 +186,7 @@ paths:
               example:
                 status: 401
                 error: Unauthorized
-                message: Invalid username, email, or password
+                message: Invalid credentials
                 timestamp: 2026-07-20T15:00:00Z
         '403':
           description: Business rule violation
