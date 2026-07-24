@@ -77,7 +77,7 @@ public class AuthService {
                         "email", email
                 )));
 
-        return new MessageBody("A verification code has been sent to your email");
+        return new MessageBody("An email has been sent to verify your account");
     }
 
     @Transactional
