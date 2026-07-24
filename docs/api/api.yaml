@@ -148,8 +148,8 @@ paths:
   /auth/login:
     post:
       operationId: login
-      summary: Authenticate and receive a JWT token
-      description: Validates credentials. If the account is verified, returns a JWT token. If the account is not verified, generates a new verification code, sends it by email asynchronously, and returns 202.
+      summary: Authenticate and request a verification code
+      description: Validates credentials (username or email + password), generates a 6-char verification code (A-Z0-9), and sends it by email. The code expires after 15 minutes. Complete login via GET /auth/verification.
       tags: [Auth]
       requestBody:
         required: true
@@ -175,7 +175,7 @@ paths:
               example:
                 status: 422
                 error: Unprocessable Entity
-                message: Username is required
+                message: Username or email is required
                 timestamp: 2026-07-20T15:00:00Z
         '401':
           description: Invalid credentials
@@ -186,7 +186,7 @@ paths:
               example:
                 status: 401
                 error: Unauthorized
-                message: Invalid username or password
+                message: Invalid credentials
                 timestamp: 2026-07-20T15:00:00Z
         '403':
           description: Business rule violation
@@ -482,13 +482,20 @@ components:
 
     LoginInput:
       type: object
-      required: [username, password]
+      required: [password]
       properties:
         username:
           type: string
+          description: Username to log in with
+        email:
+          type: string
+          format: email
+          maxLength: 100
+          description: Email to log in with
         password:
           type: string
           writeOnly: true
+      description: Provide either username or email (at least one required)
       example:
         username: jdoe
         password: s3cur3P@ss

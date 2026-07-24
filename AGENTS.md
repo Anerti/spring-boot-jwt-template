@@ -15,11 +15,12 @@ com.techindna.springbootjwttemplate
 │   ├── JwtTokenProvider.java              # JWT create/parse
 │   └── SecurityConfig.java               # SecurityFilterChain, PasswordEncoder
 ├── controller/
-│   ├── AuthController.java                # POST /auth/register, GET /auth/verification
+│   ├── AuthController.java                # POST /auth/register, POST /auth/login, GET /auth/verification
 │   └── SynController.java                 # GET /syn
 ├── dto/
 │   ├── MessageBody.java                   # { message } response
 │   ├── VerifyRegistrationResponse.java    # token + user response
+│   ├── LoginInput.java                    # login request body
 │   └── RegisterInput.java                 # register request body
 ├── entity/
 │   ├── User.java                          # domain record
@@ -43,14 +44,14 @@ com.techindna.springbootjwttemplate
 │   └── model/
 │       └── JUser.java                     # JPA entity
 ├── service/
-│   ├── AuthService.java                   # register + verification
+│   ├── AuthService.java                   # register + login + verification
 │   ├── VerificationCodeStore.java         # Redis-based verification code storage
 │   └── mail/
 │       ├── EmailService.java              # email service interface
 │       └── EmailSenderService.java        # email service implementation
 └── validator/
     ├── DataValidator.java                 # low-level format checks
-    └── UserValidator.java                 # registration rules
+    └── UserValidator.java                 # registration + login rules
 
 docs/
 ├── api/api.yaml          # OpenAPI 3.0.3 spec (source of truth for endpoints)
@@ -62,7 +63,8 @@ src/main/resources/
 │   └── V1__init.sql           # native DDL: enum + user table
 └── templates/
     └── mail/
-        └── verification.html   # Thymeleaf verification email template
+        ├── verification.html              # registration email template
+        └── login-verification.html        # login email template
 ```
 
 ## Domain entities
@@ -127,5 +129,5 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew spotlessApply
 - **JDK version**: system default is JDK 26 but Gradle 8.5+ rejects it. Always prefix with `JAVA_HOME=$HOME/.jdks/ms-21.0.11`. Never set `org.gradle.java.home` in `gradle.properties` (Gradle rejects it).
 - **`.env` is gitignored**: secrets go in `.env`, never committed.
 - **`docs/` contains an Obsidian vault**: `.obsidian/` is gitignored.
-- **Partial implementation**: POST /auth/register and GET /auth/verification implemented. POST /auth/login and users CRUD still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.
+- **Partial implementation**: POST /auth/register, POST /auth/login, and GET /auth/verification implemented. Users CRUD still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.
 - **Schema is native DDL**: `db/migration/V1__init.sql` is the source of truth but is applied manually. Never edit it in-place — create a new SQL file for changes.
