@@ -11,6 +11,7 @@ public class DataValidator {
     private static final Pattern EMAIL_FORMAT = Pattern.compile("^[a-z0-9_.-]+@[a-z0-9_-]+(\\.[a-z]+){1,2}$");
     private static final Pattern NAME_FORMAT = Pattern.compile("^[A-Z][a-z-'éèê ]{2,}$");
     private static final Pattern USERNAME_FORMAT = Pattern.compile("^[a-zA-Z_0-9-]{2,}$");
+    private static final Pattern CODE_FORMAT = Pattern.compile("^[A-Z0-9]{6}$");
 
     public void checkNullData(String field, String value) {
         if (value == null || value.isBlank()) {
@@ -48,6 +49,14 @@ public class DataValidator {
 
         if (!NAME_FORMAT.matcher(value).matches()) {
             throw new UnprocessableContentException(String.format("%s must start with a capital letter and contain only letters, hyphens, apostrophes, and spaces", field));
+        }
+    }
+
+    public void validateCode(String value) {
+        checkNullData("code", value);
+
+        if (!CODE_FORMAT.matcher(value).matches()) {
+            throw new UnprocessableContentException("Code must be exactly 6 characters and contain only uppercase letters and digits");
         }
     }
 

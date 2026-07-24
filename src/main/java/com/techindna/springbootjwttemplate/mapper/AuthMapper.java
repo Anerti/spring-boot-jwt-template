@@ -1,6 +1,7 @@
 package com.techindna.springbootjwttemplate.mapper;
 
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
+import com.techindna.springbootjwttemplate.entity.User;
 import com.techindna.springbootjwttemplate.entity.enums.UserRole;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import lombok.RequiredArgsConstructor;
@@ -20,5 +21,18 @@ public class AuthMapper {
                 .verified(false)
                 .role(UserRole.CUSTOMER)
                 .build();
+    }
+
+    public User toDomain(JUser jUser) {
+        return new User(
+                jUser.getId(),
+                jUser.getUsername(),
+                jUser.getFirstName(),
+                jUser.getLastName(),
+                jUser.getEmail(),
+                jUser.getRole(),
+                jUser.getCreatedAt(),
+                jUser.getUpdatedAt()
+        );
     }
 }

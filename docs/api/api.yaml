@@ -96,6 +96,14 @@ paths:
             minLength: 6
             maxLength: 6
           description: 6-character verification code (A-Z0-9)
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+            maxLength: 100
+          description: Email address of the account to verify
       responses:
         '200':
           description: Email verified, account activated
@@ -103,16 +111,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VerifyRegistrationResponse'
-        '400':
+        '422':
           description: Validation failure
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
               example:
-                status: 400
-                error: Bad Request
+                status: 422
+                error: Unprocessable Entity
                 message: Code must be exactly 6 characters
+                timestamp: 2026-07-20T15:00:00Z
+        '401':
+          description: Invalid verification code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Invalid verification code
                 timestamp: 2026-07-20T15:00:00Z
         '410':
           description: Verification code expired
@@ -124,17 +143,6 @@ paths:
                 status: 410
                 error: Gone
                 message: Verification code has expired
-                timestamp: 2026-07-20T15:00:00Z
-        '422':
-          description: Invalid verification code
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 422
-                error: Unprocessable Entity
-                message: Invalid verification code
                 timestamp: 2026-07-20T15:00:00Z
 
   /auth/login:

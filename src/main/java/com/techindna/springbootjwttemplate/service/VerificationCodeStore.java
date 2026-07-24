@@ -19,8 +19,9 @@ public class VerificationCodeStore {
         redis.opsForValue().set(KEY_PREFIX + email, code, TTL);
     }
 
-    public Optional<String> get(String email) {
-        return Optional.ofNullable(redis.opsForValue().get(KEY_PREFIX + email));
+    public Optional<String> getCodeByEmail(String email) {
+        String storedCode = redis.opsForValue().get(KEY_PREFIX + email);
+        return Optional.ofNullable(storedCode);
     }
 
     public void delete(String email) {
