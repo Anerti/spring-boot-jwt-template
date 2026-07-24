@@ -1,6 +1,6 @@
 {
 	"nodes":[
-		{"id":"23d73d5db42ee1a9","type":"text","text":"# User\n\n- `id uuid pk default gen_random_uuid()`\n- `username varchar(100) unique not null`\n- `password varchar(255) not null`\n- `first_name varchar(100) not null`\n- `last_name varchar(100) not null`\n- `email varchar(100) unique not null`\n- `verified boolean default false`\n- `role enum(admin, customer) default customer`\n- `created_at timestampz default now()`\n- `updated_at timestampz`\n","x":-208,"y":-155,"width":488,"height":395}
+		{"id":"23d73d5db42ee1a9","type":"text","text":"# User\n\n- `id uuid pk default gen_random_uuid()`\n- `username varchar(100) unique not null`\n- `password varchar(255) not null`\n- `first_name varchar(100) not null`\n- `last_name varchar(100) not null`\n- `email varchar(100) unique not null`\n- `verified boolean default false`\n- `role enum(admin, customer) default customer`\n- `created_at timestampz default now()`\n- `updated_at timestampz`\n","x":-208,"y":-155,"width":488,"height":355}
 	],
 	"edges":[]
 }
