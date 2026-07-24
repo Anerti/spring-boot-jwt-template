@@ -61,6 +61,8 @@ spring.mail.password=
 
 # JWT
 app.jwt.secret=
+# Base URL for building verification links (e.g. http://localhost:8080)
+app.base-url=
 
 # Redis (Upstash — RESP-compatible)
 spring.data.redis.url=
@@ -174,10 +176,11 @@ src/main/java/com/techindna/springbootjwttemplate/
 │   ├── JwtTokenProvider.java               # JWT create/parse
 │   └── SecurityConfig.java                 # SecurityFilterChain, PasswordEncoder
 ├── controller/
-│   ├── AuthController.java                 # POST /auth/register
+│   ├── AuthController.java                 # POST /auth/register, GET /auth/verification
 │   └── SynController.java                  # GET /syn
 ├── dto/
 │   ├── MessageBody.java                    # { message } response
+│   ├── VerifyRegistrationResponse.java     # token + user response
 │   └── RegisterInput.java                  # register request body
 ├── entity/
 │   ├── User.java                           # domain record
@@ -190,6 +193,7 @@ src/main/java/com/techindna/springbootjwttemplate/
 │       ├── BadRequestException.java        # 400
 │       ├── ConflictException.java          # 409
 │       ├── ForbiddenException.java         # 403
+│       ├── GoneException.java              # 410
 │       ├── NotFoundException.java          # 404
 │       ├── UnauthorizedException.java      # 401
 │       └── UnprocessableContentException.java  # 422
@@ -200,7 +204,7 @@ src/main/java/com/techindna/springbootjwttemplate/
 │   └── model/
 │       └── JUser.java                      # JPA entity
 ├── service/
-│   ├── AuthService.java                    # register orchestration
+│   ├── AuthService.java                    # register + verification
 │   ├── VerificationCodeStore.java          # Redis-based verification code storage
 │   └── mail/
 │       ├── EmailService.java               # email service interface

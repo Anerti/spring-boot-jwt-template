@@ -15,10 +15,11 @@ com.techindna.springbootjwttemplate
 │   ├── JwtTokenProvider.java              # JWT create/parse
 │   └── SecurityConfig.java               # SecurityFilterChain, PasswordEncoder
 ├── controller/
-│   ├── AuthController.java                # POST /auth/register
+│   ├── AuthController.java                # POST /auth/register, GET /auth/verification
 │   └── SynController.java                 # GET /syn
 ├── dto/
 │   ├── MessageBody.java                   # { message } response
+│   ├── VerifyRegistrationResponse.java    # token + user response
 │   └── RegisterInput.java                 # register request body
 ├── entity/
 │   ├── User.java                          # domain record
@@ -31,6 +32,7 @@ com.techindna.springbootjwttemplate
 │       ├── BadRequestException.java       # 400
 │       ├── ConflictException.java         # 409
 │       ├── ForbiddenException.java        # 403
+│       ├── GoneException.java             # 410
 │       ├── NotFoundException.java         # 404
 │       ├── UnauthorizedException.java     # 401
 │       └── UnprocessableContentException.java  # 422
@@ -41,7 +43,7 @@ com.techindna.springbootjwttemplate
 │   └── model/
 │       └── JUser.java                     # JPA entity
 ├── service/
-│   ├── AuthService.java                   # register orchestration
+│   ├── AuthService.java                   # register + verification
 │   ├── VerificationCodeStore.java         # Redis-based verification code storage
 │   └── mail/
 │       ├── EmailService.java              # email service interface
@@ -125,5 +127,5 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew spotlessApply
 - **JDK version**: system default is JDK 26 but Gradle 8.5+ rejects it. Always prefix with `JAVA_HOME=$HOME/.jdks/ms-21.0.11`. Never set `org.gradle.java.home` in `gradle.properties` (Gradle rejects it).
 - **`.env` is gitignored**: secrets go in `.env`, never committed.
 - **`docs/` contains an Obsidian vault**: `.obsidian/` is gitignored.
-- **Partial implementation**: POST /auth/register implemented. GET /auth/verification, POST /auth/login, and users CRUD still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.
+- **Partial implementation**: POST /auth/register and GET /auth/verification implemented. POST /auth/login and users CRUD still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.
 - **Schema is native DDL**: `db/migration/V1__init.sql` is the source of truth but is applied manually. Never edit it in-place — create a new SQL file for changes.
