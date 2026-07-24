@@ -16,11 +16,15 @@ import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
 import com.techindna.springbootjwttemplate.validator.UserValidator;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -42,6 +46,9 @@ public class AuthService {
     private final EmailService emailService;
     private final VerificationCodeStore verificationCodeStore;
     private final JwtTokenProvider jwtTokenProvider;
+
+    @Value("${app.base-url}")
+    private String baseUrl;
 
     @Transactional
     public MessageBody register(RegisterInput request) {
@@ -65,11 +72,17 @@ public class AuthService {
             throw e;
         }
 
+        String verificationUrl = String.format("%s/auth/verification?code=%s&email=%s",
+                baseUrl,
+                URLEncoder.encode(code, StandardCharsets.UTF_8),
+                URLEncoder.encode(email, StandardCharsets.UTF_8));
+
         emailService.sendMail(new EmailDetails(
                 email,
                 "Email Verification",
                 "mail/verification",
                 Map.of(
+                        "verificationUrl", verificationUrl,
                         "code", code,
                         "firstName", request.getFirstName().strip(),
                         "lastName", request.getLastName().strip(),
