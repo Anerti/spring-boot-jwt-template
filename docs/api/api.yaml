@@ -101,17 +101,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VerifyRegistrationResponse'
-        '422':
-          description: Validation failure
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 422
-                error: Unprocessable Entity
-                message: Token must be a valid UUID
-                timestamp: 2026-07-20T15:00:00Z
         '401':
           description: Invalid verification token
           content:
