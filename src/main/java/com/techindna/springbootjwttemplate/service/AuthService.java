@@ -5,6 +5,7 @@ import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
+import com.techindna.springbootjwttemplate.entity.GeoIpResponse;
 import com.techindna.springbootjwttemplate.entity.User;
 import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
@@ -21,12 +22,16 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
 import jakarta.servlet.http.HttpServletRequest;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -37,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final String CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int CODE_LENGTH = 6;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -49,12 +55,13 @@ public class AuthService {
     private final EmailService emailService;
     private final VerificationCodeStore verificationCodeStore;
     private final JwtTokenProvider jwtTokenProvider;
+    private final GeoIpService geoIpService;
 
     @Value("${app.base-url}")
     private String baseUrl;
 
     @Transactional
-    public MessageBody register(RegisterInput request) {
+    public MessageBody register(RegisterInput request, HttpServletRequest servletRequest) {
         userValidator.validateRegistration(request);
         String encodedPassword = passwordEncoder.encode(request.getPassword());
         String email = request.getEmail().strip().toLowerCase();
@@ -75,19 +82,21 @@ public class AuthService {
             throw e;
         }
 
-        String verificationUrl = buildVerificationUrl(token);
+        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);;
+
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("verificationUrl", verificationUrl);
+        variables.put("firstName", request.getFirstName().strip());
+        variables.put("lastName", request.getLastName().strip());
+        variables.put("username", request.getUsername().strip());
+        variables.put("email", email);
+        addClientData(variables, servletRequest);
 
         emailService.sendMail(new EmailDetails(
                 email,
                 "Email Verification",
                 "mail/verification",
-                Map.of(
-                        "verificationUrl", verificationUrl,
-                        "firstName", request.getFirstName().strip(),
-                        "lastName", request.getLastName().strip(),
-                        "username", request.getUsername().strip(),
-                        "email", email
-                )));
+                variables));
 
         return new MessageBody("An email has been sent to verify your account");
     }
@@ -116,10 +125,7 @@ public class AuthService {
 
         String verificationUrl = buildVerificationUrl(code, email);
 
-        String clientIp = servletRequest.getHeader("X-Forwarded-For");
-        if (clientIp == null || clientIp.isBlank()) {
-            clientIp = servletRequest.getRemoteAddr();
-        }
+        String clientIp = geoIpService.extractClientIp(servletRequest);
         String userAgent = servletRequest.getHeader("User-Agent");
 
         emailService.sendMail(new EmailDetails(
@@ -178,7 +184,33 @@ public class AuthService {
                 URLEncoder.encode(email, StandardCharsets.UTF_8));
     }
 
-    private String buildVerificationUrl(String token) {
-        return String.format("%s/auth/verification/%s", baseUrl, token);
+    private GeoIpResponse resolveGeoData(HttpServletRequest request) {
+        String ip = geoIpService.extractClientIp(request);
+        try {
+            return geoIpService.lookup(ip);
+        } catch (RuntimeException e) {
+            log.warn("GeoIP lookup failed for IP {}: {}", ip, e.getMessage());
+            return null;
+        }
+    }
+
+    private void addClientData(Map<String, Object> variables, HttpServletRequest request) {
+        String clientIp = geoIpService.extractClientIp(request);
+        String userAgent = request.getHeader("User-Agent");
+
+        variables.put("clientIp", clientIp);
+        variables.put("userAgent", userAgent != null ? userAgent : "Unknown");
+        variables.put("time", Instant.now());
+
+        GeoIpResponse geo = resolveGeoData(request);
+        if (geo == null) {
+            return;
+        }
+        variables.put("city", geo.city() != null ? geo.city() : "N/A");
+        variables.put("country", geo.country() != null ? geo.country() : "N/A");
+        variables.put("countryCode", geo.countryCode() != null ? geo.countryCode() : "N/A");
+        variables.put("timezone", geo.timezone() != null ? geo.timezone() : "N/A");
+        variables.put("latitude", geo.latitude() != null ? geo.latitude() : "N/A");
+        variables.put("longitude", geo.longitude() != null ? geo.longitude() : "N/A");
     }
 }
