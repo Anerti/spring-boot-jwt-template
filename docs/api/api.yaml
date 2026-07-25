@@ -80,30 +80,20 @@ paths:
                 message: Failed to send verification email
                 timestamp: 2026-07-20T15:00:00Z
 
-  /auth/verification:
+  /auth/verification/{token}:
     get:
       operationId: verifyRegistration
       summary: Verify email and activate the account
-      description: Validates the 6-char code against the pending user record, sets verified=true, and returns a JWT token. The code expires after 15 minutes. This endpoint is also invoked after POST /auth/login (for unverified accounts) and DELETE /users/{userId} (for account deletion confirmation).
+      description: Validates the UUID verification token against the pending user record, sets verified=true, and returns a JWT token. The token expires after 15 minutes. This endpoint is also invoked after POST /auth/login (for unverified accounts) and DELETE /users/{userId} (for account deletion confirmation).
       tags: [Auth]
       parameters:
-        - name: code
-          in: query
+        - name: token
+          in: path
           required: true
           schema:
             type: string
-            pattern: '^[A-Z0-9]{6}$'
-            minLength: 6
-            maxLength: 6
-          description: 6-character verification code (A-Z0-9)
-        - name: email
-          in: query
-          required: true
-          schema:
-            type: string
-            format: email
-            maxLength: 100
-          description: Email address of the account to verify
+            format: uuid
+          description: UUID verification token sent by email
       responses:
         '200':
           description: Email verified, account activated
@@ -120,10 +110,10 @@ paths:
               example:
                 status: 422
                 error: Unprocessable Entity
-                message: Code must be exactly 6 characters
+                message: Token must be a valid UUID
                 timestamp: 2026-07-20T15:00:00Z
         '401':
-          description: Invalid verification code
+          description: Invalid verification token
           content:
             application/json:
               schema:
@@ -131,10 +121,10 @@ paths:
               example:
                 status: 401
                 error: Unauthorized
-                message: Invalid verification code
+                message: Invalid verification token
                 timestamp: 2026-07-20T15:00:00Z
         '410':
-          description: Verification code expired
+          description: Verification token expired
           content:
             application/json:
               schema:
@@ -142,7 +132,7 @@ paths:
               example:
                 status: 410
                 error: Gone
-                message: Verification code has expired
+                message: Verification token has expired
                 timestamp: 2026-07-20T15:00:00Z
 
   /auth/login:
