@@ -15,6 +15,18 @@ public class VerificationCodeStore {
 
     private final StringRedisTemplate redis;
 
+    public void saveToken(String email, String token) {
+        redis.opsForValue().set(KEY_PREFIX + token, email, TTL);
+    }
+
+    public Optional<String> getEmailByToken(String token) {
+        return Optional.ofNullable(redis.opsForValue().get(KEY_PREFIX + token));
+    }
+
+    public void deleteByToken(String token) {
+        redis.delete(KEY_PREFIX + token);
+    }
+
     public void save(String email, String code) {
         redis.opsForValue().set(KEY_PREFIX + email, code, TTL);
     }

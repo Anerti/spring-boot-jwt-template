@@ -2,7 +2,7 @@
 
 ## Stack
 
-Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring WebMVC · PostgreSQL · Redis · Thymeleaf · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
+Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring WebMVC · PostgreSQL · Redis · Thymeleaf · MaxMind GeoIP2 · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
 
 ## Project structure
 
@@ -11,25 +11,30 @@ com.techindna.springbootjwttemplate
 ├── SpringBootJwtTemplateApplication.java   # entry point
 ├── config/
 │   ├── AsyncConfig.java                   # @EnableAsync + mailExecutor ThreadPoolTaskExecutor
-│   ├── JwtAuthenticationFilter.java       # JWT filter
-│   ├── JwtTokenProvider.java              # JWT create/parse
-│   └── SecurityConfig.java               # SecurityFilterChain, PasswordEncoder
+│   └── GeoIpConfig.java                  # DatabaseReader bean (MaxMind)
+├── security/
+│   ├── SecurityConfig.java               # SecurityFilterChain, PasswordEncoder
+│   └── jwt/
+│       ├── JwtAuthenticationFilter.java   # JWT filter
+│       └── JwtTokenProvider.java          # JWT create/parse
 ├── controller/
-│   ├── AuthController.java                # POST /auth/register, POST /auth/login, GET /auth/verification
-│   └── SynController.java                 # GET /syn
+│   ├── AuthController.java               # POST /auth/register, POST /auth/login, GET /auth/verification
+│   ├── GeoIpController.java              # GET /geoip, GET /geoip/{ip}
+│   └── SynController.java                # GET /syn
 ├── dto/
-│   ├── MessageBody.java                   # { message } response
-│   ├── VerifyRegistrationResponse.java    # token + user response
-│   ├── LoginInput.java                    # login request body
-│   └── RegisterInput.java                 # register request body
+│   ├── LoginInput.java                   # login request body
+│   ├── MessageBody.java                  # { message } response
+│   ├── RegisterInput.java                # register request body
+│   └── VerifyRegistrationResponse.java   # token + user response
 ├── entity/
-│   ├── User.java                          # domain record
-│   ├── email/EmailDetails.java            # email details entity
-│   └── enums/UserRole.java                # user role enum
+│   ├── GeoIpResponse.java               # GeoIP lookup result record
+│   ├── User.java                         # domain record
+│   ├── email/EmailDetails.java           # email details entity
+│   └── enums/UserRole.java               # user role enum
 ├── exception/
-│   ├── ErrorBody.java                     # error response DTO
-│   ├── GlobalExceptionHandler.java        # centralized error handling
-│   └── http/                              # HTTP exception classes
+│   ├── ErrorBody.java                    # error response DTO
+│   ├── GlobalExceptionHandler.java       # centralized error handling
+│   └── http/                             # HTTP exception classes
 │       ├── BadRequestException.java       # 400
 │       ├── ConflictException.java         # 409
 │       ├── ForbiddenException.java        # 403
@@ -38,20 +43,22 @@ com.techindna.springbootjwttemplate
 │       ├── UnauthorizedException.java     # 401
 │       └── UnprocessableContentException.java  # 422
 ├── mapper/
-│   └── AuthMapper.java                    # RegisterInput → JUser
+│   ├── AuthMapper.java                   # RegisterInput → JUser
+│   └── GeoIpMapper.java                 # CityResponse → GeoIpResponse
 ├── repository/
-│   ├── AuthRepository.java                # JPA repository
+│   ├── AuthRepository.java               # JPA repository
 │   └── model/
-│       └── JUser.java                     # JPA entity
+│       └── JUser.java                    # JPA entity
 ├── service/
-│   ├── AuthService.java                   # register + login + verification
-│   ├── VerificationCodeStore.java         # Redis-based verification code storage
+│   ├── AuthService.java                  # register + login + verification
+│   ├── GeoIpService.java                # IP lookup, client IP extraction
+│   ├── VerificationCodeStore.java        # Redis-based verification code storage
 │   └── mail/
-│       ├── EmailService.java              # email service interface
-│       └── EmailSenderService.java        # email service implementation
+│       ├── EmailService.java             # email service interface
+│       └── EmailSenderService.java       # email service implementation
 └── validator/
-    ├── DataValidator.java                 # low-level format checks
-    └── UserValidator.java                 # registration + login rules
+    ├── DataValidator.java                # low-level format checks
+    └── UserValidator.java                # registration + login rules
 
 docs/
 ├── api/api.yaml          # OpenAPI 3.0.3 spec (source of truth for endpoints)
@@ -61,6 +68,8 @@ src/main/resources/
 ├── application.properties
 ├── db/migration/
 │   └── V1__init.sql           # native DDL: enum + user table
+├── geoip/
+│   └── GeoLite2-City.mmdb     # MaxMind GeoIP database
 └── templates/
     └── mail/
         ├── verification.html              # registration email template
@@ -84,6 +93,9 @@ src/main/resources/
 | POST   | /auth/register      | —    | Register → 202, sends verification code by email |
 | GET    | /auth/verification  | —    | Verify code → 200 with JWT token                 |
 | POST   | /auth/login         | —    | Login → 202, sends verification code by email    |
+| POST   | /auth/resend-code   | —    | Resend verification code → 202                    |
+| GET    | /geoip              | —    | Resolve client geolocation (X-Forwarded-For)      |
+| GET    | /geoip/{ip}         | —    | Resolve IP geolocation (IPv4/IPv6)                |
 | GET    | /users              | JWT  | List users (paginated, admin only)               |
 | GET    | /users/{userId}     | JWT  | Get user by ID                                   |
 | PUT    | /users/{userId}     | JWT  | Update user                                      |
@@ -119,7 +131,8 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew spotlessApply
 - **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
 - **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. ADMIN→CUSTOMER; self-only
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
-- **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`)
+- **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`, `/geoip`)
+- **GeoIP**: MaxMind MMDB in `resources/geoip/`, read via `classpath:`, manual DB updates
 - **Docs language**: English for API descriptions, French for user-facing instructions
 - **Commits**: one commit per logical change, conventional format
 - **Code style**: English-only, no comments/docstrings, short focused functions, explicit constructors over `@AllArgsConstructor`
@@ -129,5 +142,6 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew spotlessApply
 - **JDK version**: system default is JDK 26 but Gradle 8.5+ rejects it. Always prefix with `JAVA_HOME=$HOME/.jdks/ms-21.0.11`. Never set `org.gradle.java.home` in `gradle.properties` (Gradle rejects it).
 - **`.env` is gitignored**: secrets go in `.env`, never committed.
 - **`docs/` contains an Obsidian vault**: `.obsidian/` is gitignored.
-- **Partial implementation**: POST /auth/register, POST /auth/login, and GET /auth/verification implemented. Users CRUD still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.
+- **Partial implementation**: POST /auth/register, POST /auth/login, GET /auth/verification, and GET /auth/resend-code implemented. Users CRUD still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.
 - **Schema is native DDL**: `db/migration/V1__init.sql` is the source of truth but is applied manually. Never edit it in-place — create a new SQL file for changes.
+- **GeoIP MMDB**: `classpath:geoip/GeoLite2-City.mmdb` is read via `Resource.getInputStream()`. Update manually by replacing the file in `src/main/resources/geoip/`.

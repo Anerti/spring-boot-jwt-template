@@ -1,4 +1,4 @@
-package com.techindna.springbootjwttemplate.config;
+package com.techindna.springbootjwttemplate.security.jwt;
 
 import static java.util.List.of;
 

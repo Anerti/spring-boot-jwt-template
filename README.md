@@ -1,6 +1,6 @@
 # Spring Boot JWT Template
 
-A production-ready Spring Boot starter template with JWT authentication, email verification, Redis-based verification code storage, and PostgreSQL persistence.
+A production-ready Spring Boot starter template with JWT authentication, email verification, Redis-based verification code storage, PostgreSQL persistence, and MaxMind GeoIP geolocation.
 
 ## Table of Contents
 
@@ -9,6 +9,7 @@ A production-ready Spring Boot starter template with JWT authentication, email v
 - [Configuration](#configuration)
   - [Environment Variables (.env)](#environment-variables-env)
   - [Mail Configuration](#mail-configuration)
+  - [GeoIP Configuration](#geoip-configuration)
 - [Getting Started](#getting-started)
   - [1. Clone and Configure](#1-clone-and-configure)
   - [2. Build](#2-build)
@@ -20,6 +21,7 @@ A production-ready Spring Boot starter template with JWT authentication, email v
 - [API Endpoints](#api-endpoints)
   - [Health](#health)
   - [Authentication](#authentication)
+  - [GeoIP](#geoip)
   - [Users](#users)
 - [Architecture](#architecture)
   - [Project Structure](#project-structure)
@@ -29,7 +31,7 @@ A production-ready Spring Boot starter template with JWT authentication, email v
 
 ## Stack
 
-Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring Security · Spring WebMVC · Spring Mail · Thymeleaf · Redis · PostgreSQL · jjwt 0.12.6 · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
+Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring Security · Spring WebMVC · Spring Mail · Thymeleaf · Redis · PostgreSQL · jjwt 0.12.6 · MaxMind GeoIP2 · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
 
 ## Prerequisites
 
@@ -39,6 +41,7 @@ Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring Security · Spring Web
 | Gradle | 9.5.1+ | Bundled via `./gradlew` |
 | PostgreSQL | 14+ | Local or Neon/Supabase |
 | Redis | 7+ | Used for verification code storage (15 min TTL) |
+| MaxMind GeoLite2-City | — | MMDB file in `src/main/resources/geoip/` |
 
 ## Configuration
 
@@ -79,6 +82,19 @@ The application uses Gmail SMTP for sending verification codes. To configure:
 3. Set `spring.mail.username` and `spring.mail.password` in `.env`
 
 Host (`smtp.gmail.com`) and port (`587`) are configured in `application.properties`.
+
+### GeoIP Configuration
+
+The application uses MaxMind GeoLite2-City for IP geolocation. The MMDB database file is bundled at `src/main/resources/geoip/GeoLite2-City.mmdb`.
+
+Properties in `application.properties`:
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `geoip.database-path` | `classpath:geoip/GeoLite2-City.mmdb` | Path to the MaxMind MMDB file |
+| `geoip.trust-x-forwarded-for` | `true` | Use `X-Forwarded-For` header for client IP |
+
+To update the database, download a new `GeoLite2-City.mmdb` from [MaxMind](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) and replace the file in `src/main/resources/geoip/`.
 
 ## Getting Started
 
@@ -151,8 +167,16 @@ Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/auth/register` | — | Register → 202, sends verification code by email |
-| GET | `/auth/verification?code=...` | — | Verify code → 200 with JWT token |
+| GET | `/auth/verification?code=...&email=...` | — | Verify code → 200 with JWT token |
 | POST | `/auth/login` | — | Login → 202, sends verification code by email |
+| POST | `/auth/resend-code?email=...` | — | Resend verification code → 202 |
+
+### GeoIP
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/geoip` | — | Resolve client geolocation via X-Forwarded-For |
+| GET | `/geoip/{ip}` | — | Resolve IP geolocation (IPv4/IPv6) |
 
 ### Users
 
@@ -172,17 +196,23 @@ src/main/java/com/techindna/springbootjwttemplate/
 ├── SpringBootJwtTemplateApplication.java   # entry point
 ├── config/
 │   ├── AsyncConfig.java                    # @EnableAsync + mailExecutor ThreadPoolTaskExecutor
-│   ├── JwtAuthenticationFilter.java        # JWT filter
-│   ├── JwtTokenProvider.java               # JWT create/parse
-│   └── SecurityConfig.java                 # SecurityFilterChain, PasswordEncoder
+│   └── GeoIpConfig.java                   # DatabaseReader bean (MaxMind)
+├── security/
+│   ├── SecurityConfig.java                 # SecurityFilterChain, PasswordEncoder
+│   └── jwt/
+│       ├── JwtAuthenticationFilter.java    # JWT filter
+│       └── JwtTokenProvider.java           # JWT create/parse
 ├── controller/
-│   ├── AuthController.java                 # POST /auth/register, GET /auth/verification
+│   ├── AuthController.java                 # POST /auth/register, POST /auth/login, GET /auth/verification
+│   ├── GeoIpController.java                # GET /geoip, GET /geoip/{ip}
 │   └── SynController.java                  # GET /syn
 ├── dto/
+│   ├── LoginInput.java                     # login request body
 │   ├── MessageBody.java                    # { message } response
-│   ├── VerifyRegistrationResponse.java     # token + user response
-│   └── RegisterInput.java                  # register request body
+│   ├── RegisterInput.java                  # register request body
+│   └── VerifyRegistrationResponse.java     # token + user response
 ├── entity/
+│   ├── GeoIpResponse.java                  # GeoIP lookup result record
 │   ├── User.java                           # domain record
 │   ├── email/EmailDetails.java             # email details entity
 │   └── enums/UserRole.java                 # user role enum
@@ -198,13 +228,15 @@ src/main/java/com/techindna/springbootjwttemplate/
 │       ├── UnauthorizedException.java      # 401
 │       └── UnprocessableContentException.java  # 422
 ├── mapper/
-│   └── AuthMapper.java                     # RegisterInput → JUser
+│   ├── AuthMapper.java                     # RegisterInput → JUser
+│   └── GeoIpMapper.java                   # CityResponse → GeoIpResponse
 ├── repository/
 │   ├── AuthRepository.java                 # JPA repository
 │   └── model/
 │       └── JUser.java                      # JPA entity
 ├── service/
-│   ├── AuthService.java                    # register + verification
+│   ├── AuthService.java                    # register + login + verification
+│   ├── GeoIpService.java                  # IP lookup, client IP extraction
 │   ├── VerificationCodeStore.java          # Redis-based verification code storage
 │   └── mail/
 │       ├── EmailService.java               # email service interface
@@ -217,9 +249,12 @@ src/main/resources/
 ├── application.properties
 ├── db/migration/
 │   └── V1__init.sql                        # native DDL: enum + user table
+├── geoip/
+│   └── GeoLite2-City.mmdb                  # MaxMind GeoIP database
 └── templates/
     └── mail/
-        └── verification.html               # Thymeleaf verification email template
+        ├── verification.html               # registration email template
+        └── login-verification.html         # login email template
 ```
 
 ### Conventions
@@ -233,7 +268,8 @@ src/main/resources/
 - **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
 - **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. ADMIN→CUSTOMER; self-only
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
-- **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`)
+- **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`, `/geoip`)
+- **GeoIP**: MaxMind MMDB in `src/main/resources/geoip/`, read via `classpath:` prefix, manual updates
 - **Docs language**: English for API descriptions, French for user-facing instructions
 - **Commits**: one commit per logical change, conventional format
 - **Code style**: English-only, no comments/docstrings, short focused functions, explicit constructors over `@AllArgsConstructor`

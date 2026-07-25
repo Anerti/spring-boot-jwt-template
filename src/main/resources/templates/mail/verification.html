@@ -31,42 +31,27 @@
                                 Hello <strong th:text="${firstName}">John</strong>,
                             </p>
                             <p style="margin: 0 0 24px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px;">
-                                Thank you for registering. Please verify your email using one of the options below.
+                                Thank you for registering. Please verify your email by clicking the button below.
                             </p>
-
-                            <!-- Code box -->
-                            <p style="margin: 0 0 8px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px; text-align: center;">
-                                Use this verification code:
-                            </p>
-                            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom: 16px;">
-                                <tr>
-                                    <td align="center" style="background-color: #f0f0f0; border-radius: 6px; padding: 16px;">
-                                        <span th:text="${code}" style="font-family: 'Courier New', Courier, monospace; font-size: 28px; font-weight: bold; color: #1a1a2e; letter-spacing: 6px;">ABC123</span>
-                                    </td>
-                                </tr>
-                            </table>
 
                             <!-- Verify button -->
-                            <p style="margin: 0 0 8px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px; text-align: center;">
-                                Or click the link below:
-                            </p>
                             <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom: 16px;">
                                 <tr>
                                     <td align="center">
-                                        <a th:href="${verificationUrl}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none; padding: 14px 32px; border-radius: 6px; mso-line-height-rule: exactly; line-height: 20px;">Verify my email</a>
+                                        <a th:href="${verificationUrl}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none; padding: 14px 32px; border-radius: 6px; mso-line-height-rule: exactly; line-height: 20px;">Verify account</a>
                                     </td>
                                 </tr>
                             </table>
 
                             <p style="margin: 0 0 8px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px; text-align: center;">
-                                Both the code and the link expire in <strong>15 minutes</strong>.
+                                This link expires in <strong>15 minutes</strong>.
                             </p>
 
-                            <!-- Account details -->
+                            <!-- Registration details -->
                             <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 24px; border-top: 1px solid #e8e8e8;">
                                 <tr>
                                     <td style="padding: 16px 0 8px;">
-                                        <p style="margin: 0; color: #777777; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Account Details</p>
+                                        <p style="margin: 0; color: #777777; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Registration Details</p>
                                     </td>
                                 </tr>
                             </table>
@@ -80,8 +65,37 @@
                                     <td th:text="${firstName} + ' ' + ${lastName}" style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">John Doe</td>
                                 </tr>
                                 <tr>
-                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold;">Email</td>
-                                    <td th:text="${email}" style="padding: 10px 12px; color: #333333; font-size: 13px; word-wrap: break-word;">jdoe@example.com</td>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Email</td>
+                                    <td th:text="${email}" style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">jdoe@example.com</td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">IP Address</td>
+                                    <td th:text="${clientIp}" style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">127.0.0.1</td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">User Agent</td>
+                                    <td th:text="${userAgent}" style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">Mozilla/5.0</td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Location</td>
+                                    <td style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">
+                                        <span th:text="${city}">Paris</span>, <span th:text="${country}">France</span>
+                                        (<span th:text="${countryCode}">FR</span>)
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Timezone</td>
+                                    <td th:text="${timezone}" style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">Europe/Paris</td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Coordinates</td>
+                                    <td style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">
+                                        <span th:text="${latitude}">48.8566</span>, <span th:text="${longitude}">2.3522</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold;">Registered At</td>
+                                    <td th:text="${time}" style="padding: 10px 12px; color: #333333; font-size: 13px; word-wrap: break-word;">2025-01-01T00:00:00Z</td>
                                 </tr>
                             </table>
                         </td>

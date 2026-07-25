@@ -29,7 +29,7 @@ paths:
     post:
       operationId: register
       summary: Register a new user account (pending verification)
-      description: Validates the registration data, saves the user with verified=false, generates a 6-char verification code (A-Z0-9), and sends it by email. The account is not active until verified via GET /auth/verification. The code expires after 15 minutes. Login is blocked until verification.
+      description: Validates the registration data, saves the user with verified=false, generates a UUID verification token stored in Redis, and sends a verification link by email. The account is not active until verified via GET /auth/verification. The token expires after 15 minutes. Login is blocked until verification.
       tags: [Auth]
       requestBody:
         required: true
@@ -39,13 +39,13 @@ paths:
               $ref: '#/components/schemas/RegisterInput'
       responses:
         '202':
-          description: Validation passed, verification code sent by email
+          description: Validation passed, verification link sent by email
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageBody'
               example:
-                message: A verification code has been sent to your email
+                message: An email has been sent to verify your account
         '422':
           description: Validation failure
           content:
@@ -257,6 +257,86 @@ paths:
                 error: Internal Server Error
                 message: Failed to send verification email
                 timestamp: 2026-07-20T15:00:00Z
+
+  # ──────────────── GeoIP ────────────────
+  /geoip:
+    get:
+      operationId: getOwnGeoIp
+      summary: Resolve client geolocation
+      description: Returns city, country, coordinates, timezone and other geolocation data for the calling client's IP. Powered by MaxMind GeoLite2-City.
+      tags: [GeoIP]
+      responses:
+        '200':
+          description: Geolocation data for the client's IP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoIpResponse'
+        '400':
+          description: Invalid IP address format (e.g. from malformed X-Forwarded-For header)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 400
+                error: Bad Request
+                message: Invalid IP address format
+                timestamp: 2026-07-25T12:00:00Z
+        '404':
+          description: IP address not found in database
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 404
+                error: Not Found
+                message: IP address not found in database
+                timestamp: 2026-07-25T12:00:00Z
+
+  /geoip/{ip}:
+    get:
+      operationId: getGeoIpByIp
+      summary: Resolve IP geolocation
+      description: Returns city, country, coordinates, timezone and other geolocation data for a given IP address. Powered by MaxMind GeoLite2-City.
+      tags: [GeoIP]
+      parameters:
+        - name: ip
+          in: path
+          required: true
+          schema:
+            type: string
+          description: IP address to look up (IPv4 or IPv6)
+      responses:
+        '200':
+          description: Geolocation data for the resolved IP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoIpResponse'
+        '400':
+          description: Invalid IP address format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 400
+                error: Bad Request
+                message: Invalid IP address format
+                timestamp: 2026-07-25T12:00:00Z
+        '404':
+          description: IP address not found in database
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 404
+                error: Not Found
+                message: IP address not found in database
+                timestamp: 2026-07-25T12:00:00Z
 
   # ──────────────── Users CRUD ────────────────
   /users:
@@ -697,6 +777,55 @@ components:
           type: string
           format: date-time
           description: When the error occurred
+
+    # ── GeoIP ──
+    GeoIpResponse:
+      type: object
+      required: [ip]
+      properties:
+        ip:
+          type: string
+          description: Resolved IP address
+        city:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        countryCode:
+          type: string
+          nullable: true
+        continent:
+          type: string
+          nullable: true
+        subdivision:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+          nullable: true
+        longitude:
+          type: number
+          format: double
+          nullable: true
+      example:
+        ip: 8.8.8.8
+        city: Mountain View
+        country: United States
+        countryCode: US
+        continent: North America
+        subdivision: California
+        postalCode: 94043
+        timezone: America/Los_Angeles
+        latitude: 37.386
+        longitude: -122.084
 
     Meta:
       type: object

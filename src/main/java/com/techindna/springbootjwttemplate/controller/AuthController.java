@@ -24,8 +24,8 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<MessageBody> register(@RequestBody RegisterInput request) {
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(authService.register(request));
+    public ResponseEntity<MessageBody> register(@RequestBody RegisterInput request, HttpServletRequest servletRequest) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(authService.register(request, servletRequest));
     }
 
     @PostMapping("/login")
