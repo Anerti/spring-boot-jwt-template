@@ -95,7 +95,7 @@ public class AuthService {
         return new MessageBody("An email has been sent to verify your account");
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
         userValidator.validateLogin(request);
 
@@ -141,8 +141,11 @@ public class AuthService {
         JUser jUser = authRepository.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
 
-        jUser.setVerified(true);
-        authRepository.save(jUser);
+        if (!jUser.getVerified()) {
+            jUser.setVerified(true);
+            authRepository.save(jUser);
+        }
+        
         verificationCodeStore.deleteByToken(tokenStr);
 
         String jwtToken = jwtTokenProvider.generateToken(jUser.getId().toString(), jUser.getRole().name());
