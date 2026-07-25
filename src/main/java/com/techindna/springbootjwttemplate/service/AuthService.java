@@ -23,6 +23,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -46,6 +48,8 @@ public class AuthService {
     private static final String CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int CODE_LENGTH = 6;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final DateTimeFormatter REGISTERED_AT_FORMAT =
+            DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
 
     private final AuthRepository authRepository;
     private final AuthMapper authMapper;
@@ -82,7 +86,7 @@ public class AuthService {
             throw e;
         }
 
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);;
+        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
 
         Map<String, Object> variables = new LinkedHashMap<>();
         variables.put("verificationUrl", verificationUrl);
@@ -200,17 +204,14 @@ public class AuthService {
 
         variables.put("clientIp", clientIp);
         variables.put("userAgent", userAgent != null ? userAgent : "Unknown");
-        variables.put("time", Instant.now());
+        variables.put("time", REGISTERED_AT_FORMAT.format(Instant.now()));
 
         GeoIpResponse geo = resolveGeoData(request);
-        if (geo == null) {
-            return;
-        }
-        variables.put("city", geo.city() != null ? geo.city() : "N/A");
-        variables.put("country", geo.country() != null ? geo.country() : "N/A");
-        variables.put("countryCode", geo.countryCode() != null ? geo.countryCode() : "N/A");
-        variables.put("timezone", geo.timezone() != null ? geo.timezone() : "N/A");
-        variables.put("latitude", geo.latitude() != null ? geo.latitude() : "N/A");
-        variables.put("longitude", geo.longitude() != null ? geo.longitude() : "N/A");
+        variables.put("city", geo != null && geo.city() != null ? geo.city() : "N/A");
+        variables.put("country", geo != null && geo.country() != null ? geo.country() : "N/A");
+        variables.put("countryCode", geo != null && geo.countryCode() != null ? geo.countryCode() : "N/A");
+        variables.put("timezone", geo != null && geo.timezone() != null ? geo.timezone() : "N/A");
+        variables.put("latitude", geo != null && geo.latitude() != null ? String.format("%.6f", geo.latitude()) : "N/A");
+        variables.put("longitude", geo != null && geo.longitude() != null ? String.format("%.6f", geo.longitude()) : "N/A");
     }
 }

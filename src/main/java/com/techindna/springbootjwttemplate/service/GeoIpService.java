@@ -29,9 +29,10 @@ public class GeoIpService {
     private boolean trustXForwardedFor;
 
     public GeoIpResponse lookup(String ip) {
-        if (!dataValidator.isValidIpFormat(ip)) {
+        if (!dataValidator.isValidAddressFormat(ip)) {
             throw new BadRequestException("Invalid IP address format");
         }
+
         try {
             InetAddress address = InetAddress.getByName(ip);
             CityResponse response = geoIpCityReader.city(address);

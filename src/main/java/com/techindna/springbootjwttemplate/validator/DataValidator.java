@@ -62,7 +62,7 @@ public class DataValidator {
         }
     }
 
-    public boolean isValidIpFormat(String ip) {
+    public boolean isValidAddressFormat(String ip) {
         if (ip == null || ip.isBlank()) {
             return false;
         }
