@@ -15,7 +15,6 @@ import com.techindna.springbootjwttemplate.mapper.AuthMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
-import com.techindna.springbootjwttemplate.validator.DataValidator;
 import com.techindna.springbootjwttemplate.validator.UserValidator;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
