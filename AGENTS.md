@@ -91,7 +91,7 @@ src/main/resources/
 | Method | Path                | Auth | Description                                      |
 |--------|---------------------|------|--------------------------------------------------|
 | POST   | /auth/register      | —    | Register → 202, sends verification code by email |
-| GET    | /auth/verification  | —    | Verify code → 200 with JWT token                 |
+| GET    | /auth/verification/{token} | —    | Verify token → 200 with JWT token                 |
 | POST   | /auth/login         | —    | Login → 202, sends verification code by email    |
 | POST   | /auth/resend-code   | —    | Resend verification code → 202                    |
 | GET    | /geoip              | —    | Resolve client geolocation (X-Forwarded-For)      |
