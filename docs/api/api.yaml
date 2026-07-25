@@ -725,7 +725,7 @@ components:
           type: string
           description: Human-readable message
       example:
-        message: A verification code has been sent to your email
+        message: A verification link has been sent to your email
 
     # ── Shared error body ──
     ErrorBody:

@@ -16,9 +16,6 @@ import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
 import com.techindna.springbootjwttemplate.validator.UserValidator;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -42,9 +39,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
-    private static final String CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    private static final int CODE_LENGTH = 6;
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final DateTimeFormatter REGISTERED_AT_FORMAT =
             DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
 
@@ -120,26 +114,22 @@ public class AuthService {
         }
 
         String email = jUser.getEmail();
-        String code = generateCode();
-        verificationCodeStore.save(email, code);
+        String token = UUID.randomUUID().toString();
+        verificationCodeStore.saveToken(email, token);
 
-        String verificationUrl = buildVerificationUrl(code, email);
+        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
 
-        String clientIp = geoIpService.extractClientIp(servletRequest);
-        String userAgent = servletRequest.getHeader("User-Agent");
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("verificationUrl", verificationUrl);
+        addClientData(variables, servletRequest);
 
         emailService.sendMail(new EmailDetails(
                 email,
                 "Login Verification",
                 "mail/login-verification",
-                Map.of(
-                        "verificationUrl", verificationUrl,
-                        "code", code,
-                        "clientIp", clientIp,
-                        "userAgent", userAgent != null ? userAgent : "Unknown"
-                )));
+                variables));
 
-        return new MessageBody("A verification code has been sent to your email");
+        return new MessageBody("A verification link has been sent to your email");
     }
 
     @Transactional
@@ -159,21 +149,6 @@ public class AuthService {
         User user = authMapper.toDomain(jUser);
 
         return new VerifyRegistrationResponse(jwtToken, user);
-    }
-
-    private static String generateCode() {
-        StringBuilder sb = new StringBuilder(CODE_LENGTH);
-        for (int i = 0; i < CODE_LENGTH; i++) {
-            sb.append(CODE_CHARS.charAt(SECURE_RANDOM.nextInt(CODE_CHARS.length())));
-        }
-        return sb.toString();
-    }
-
-    private String buildVerificationUrl(String code, String email) {
-        return String.format("%s/auth/verification?code=%s&email=%s",
-                baseUrl,
-                URLEncoder.encode(code, StandardCharsets.UTF_8),
-                URLEncoder.encode(email, StandardCharsets.UTF_8));
     }
 
     private GeoIpResponse resolveGeoData(HttpServletRequest request) {

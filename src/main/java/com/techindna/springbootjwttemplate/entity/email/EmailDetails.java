@@ -14,8 +14,6 @@ public class EmailDetails {
     private String subject;
     private String template;
     private Map<String, Object> variables;
-    private String attachment;
-
     public EmailDetails(String recipient, String subject, String template, Map<String, Object> variables) {
         this.recipient = recipient;
         this.subject = subject;

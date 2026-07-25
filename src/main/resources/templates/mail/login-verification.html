@@ -28,25 +28,10 @@
                     <tr>
                         <td style="padding: 32px;">
                             <p style="margin: 0 0 16px; color: #333333; font-size: 15px; mso-line-height-rule: exactly; line-height: 24px;">
-                                A login attempt was detected on your account. Please verify your identity using one of the options below.
+                                A login attempt was detected on your account. Please verify your identity by clicking the link below.
                             </p>
-
-                            <!-- Code box -->
-                            <p style="margin: 0 0 8px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px; text-align: center;">
-                                Use this verification code:
-                            </p>
-                            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom: 16px;">
-                                <tr>
-                                    <td align="center" style="background-color: #f0f0f0; border-radius: 6px; padding: 16px;">
-                                        <span th:text="${code}" style="font-family: 'Courier New', Courier, monospace; font-size: 28px; font-weight: bold; color: #1a1a2e; letter-spacing: 6px;">ABC123</span>
-                                    </td>
-                                </tr>
-                            </table>
 
                             <!-- Verify button -->
-                            <p style="margin: 0 0 8px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px; text-align: center;">
-                                Or click the link below:
-                            </p>
                             <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom: 16px;">
                                 <tr>
                                     <td align="center">
@@ -56,7 +41,7 @@
                             </table>
 
                             <p style="margin: 0 0 8px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px; text-align: center;">
-                                Both the code and the link expire in <strong>15 minutes</strong>.
+                                The link expires in <strong>15 minutes</strong>.
                             </p>
 
                             <!-- Login details -->
@@ -73,8 +58,29 @@
                                     <td th:text="${clientIp}" style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">127.0.0.1</td>
                                 </tr>
                                 <tr>
-                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold;">User Agent</td>
-                                    <td th:text="${userAgent}" style="padding: 10px 12px; color: #333333; font-size: 13px; word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap;">Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36</td>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">User Agent</td>
+                                    <td th:text="${userAgent}" style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap;">Mozilla/5.0</td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Location</td>
+                                    <td style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">
+                                        <span th:text="${city}">Paris</span>, <span th:text="${country}">France</span>
+                                        (<span th:text="${countryCode}">FR</span>)
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Timezone</td>
+                                    <td th:text="${timezone}" style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">Europe/Paris</td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">Coordinates</td>
+                                    <td style="padding: 10px 12px; color: #333333; font-size: 13px; border-bottom: 1px solid #e0e0e0; word-wrap: break-word;">
+                                        <span th:text="${latitude}">48.8566</span>, <span th:text="${longitude}">2.3522</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td width="100" style="padding: 10px 12px; color: #555555; font-size: 13px; font-weight: bold;">Time</td>
+                                    <td th:text="${time}" style="padding: 10px 12px; color: #333333; font-size: 13px; word-wrap: break-word;">2025-01-01T00:00:00Z</td>
                                 </tr>
                             </table>
                         </td>
