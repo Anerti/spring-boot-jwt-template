@@ -1,6 +1,6 @@
 package com.techindna.springbootjwttemplate.service;
 
-import com.techindna.springbootjwttemplate.config.JwtTokenProvider;
+import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
@@ -11,7 +11,6 @@ import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.GoneException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
-import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
 import com.techindna.springbootjwttemplate.mapper.AuthMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
@@ -22,8 +21,8 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -58,13 +57,13 @@ public class AuthService {
     public MessageBody register(RegisterInput request) {
         userValidator.validateRegistration(request);
         String encodedPassword = passwordEncoder.encode(request.getPassword());
-        String code = generateCode();
         String email = request.getEmail().strip().toLowerCase();
+        String token = UUID.randomUUID().toString();
 
         try {
             authRepository.save(authMapper.toEntity(request, encodedPassword));
             authRepository.flush();
-            verificationCodeStore.save(email, code);
+            verificationCodeStore.saveToken(email, token);
         } catch (DataIntegrityViolationException e) {
             String constraint = e.getMostSpecificCause().getMessage();
             if (constraint != null && constraint.contains("email")) {
@@ -76,7 +75,7 @@ public class AuthService {
             throw e;
         }
 
-        String verificationUrl = buildVerificationUrl(code, email);
+        String verificationUrl = buildVerificationUrl(token);
 
         emailService.sendMail(new EmailDetails(
                 email,
@@ -84,7 +83,6 @@ public class AuthService {
                 "mail/verification",
                 Map.of(
                         "verificationUrl", verificationUrl,
-                        "code", code,
                         "firstName", request.getFirstName().strip(),
                         "lastName", request.getLastName().strip(),
                         "username", request.getUsername().strip(),
@@ -178,5 +176,9 @@ public class AuthService {
                 baseUrl,
                 URLEncoder.encode(code, StandardCharsets.UTF_8),
                 URLEncoder.encode(email, StandardCharsets.UTF_8));
+    }
+
+    private String buildVerificationUrl(String token) {
+        return String.format("%s/auth/verification/%s", baseUrl, token);
     }
 }

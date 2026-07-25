@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.http.HttpStatus;
 import tools.jackson.databind.ObjectMapper;
 
 @Getter
@@ -30,7 +31,7 @@ public class ErrorBody {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public static void send(HttpServletResponse response, org.springframework.http.HttpStatus status, String message)
+    public static void send(HttpServletResponse response, HttpStatus status, String message)
             throws IOException {
         response.setContentType("application/json;charset=UTF-8");
         response.setStatus(status.value());

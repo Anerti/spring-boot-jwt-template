@@ -31,35 +31,20 @@
                                 Hello <strong th:text="${firstName}">John</strong>,
                             </p>
                             <p style="margin: 0 0 24px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px;">
-                                Thank you for registering. Please verify your email using one of the options below.
+                                Thank you for registering. Please verify your email by clicking the button below.
                             </p>
-
-                            <!-- Code box -->
-                            <p style="margin: 0 0 8px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px; text-align: center;">
-                                Use this verification code:
-                            </p>
-                            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom: 16px;">
-                                <tr>
-                                    <td align="center" style="background-color: #f0f0f0; border-radius: 6px; padding: 16px;">
-                                        <span th:text="${code}" style="font-family: 'Courier New', Courier, monospace; font-size: 28px; font-weight: bold; color: #1a1a2e; letter-spacing: 6px;">ABC123</span>
-                                    </td>
-                                </tr>
-                            </table>
 
                             <!-- Verify button -->
-                            <p style="margin: 0 0 8px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px; text-align: center;">
-                                Or click the link below:
-                            </p>
                             <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom: 16px;">
                                 <tr>
                                     <td align="center">
-                                        <a th:href="${verificationUrl}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none; padding: 14px 32px; border-radius: 6px; mso-line-height-rule: exactly; line-height: 20px;">Verify my email</a>
+                                        <a th:href="${verificationUrl}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none; padding: 14px 32px; border-radius: 6px; mso-line-height-rule: exactly; line-height: 20px;">Verify account</a>
                                     </td>
                                 </tr>
                             </table>
 
                             <p style="margin: 0 0 8px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px; text-align: center;">
-                                Both the code and the link expire in <strong>15 minutes</strong>.
+                                This link expires in <strong>15 minutes</strong>.
                             </p>
 
                             <!-- Account details -->

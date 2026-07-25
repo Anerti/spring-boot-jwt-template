@@ -1,5 +1,6 @@
-package com.techindna.springbootjwttemplate.config;
+package com.techindna.springbootjwttemplate.security;
 
+import com.techindna.springbootjwttemplate.security.jwt.JwtAuthenticationFilter;
 import com.techindna.springbootjwttemplate.exception.ErrorBody;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,6 +35,8 @@ public class SecurityConfig {
                                 auth.requestMatchers("/auth/**")
                                         .permitAll()
                                         .requestMatchers("/syn")
+                                        .permitAll()
+                                        .requestMatchers("/geoip")
                                         .permitAll()
                                         .requestMatchers("/users/**")
                                         .authenticated()
