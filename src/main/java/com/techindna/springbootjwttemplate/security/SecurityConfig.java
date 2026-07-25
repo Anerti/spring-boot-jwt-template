@@ -36,7 +36,7 @@ public class SecurityConfig {
                                         .permitAll()
                                         .requestMatchers("/syn")
                                         .permitAll()
-                                        .requestMatchers("/geoip")
+                                        .requestMatchers("/geoip/**")
                                         .permitAll()
                                         .requestMatchers("/users/**")
                                         .authenticated()
