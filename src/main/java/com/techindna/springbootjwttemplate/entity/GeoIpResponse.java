@@ -9,6 +9,6 @@ public record GeoIpResponse(
     String subdivision,
     String postalCode,
     String timezone,
-    double latitude,
-    double longitude
+    Double latitude,
+    Double longitude
 ) {}

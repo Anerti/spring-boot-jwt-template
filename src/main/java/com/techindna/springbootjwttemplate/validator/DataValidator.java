@@ -3,6 +3,8 @@ package com.techindna.springbootjwttemplate.validator;
 import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
 import org.springframework.stereotype.Component;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.regex.Pattern;
 
 @Component
@@ -57,6 +59,19 @@ public class DataValidator {
 
         if (!CODE_FORMAT.matcher(value).matches()) {
             throw new UnprocessableContentException("Code must be exactly 6 characters and contain only uppercase letters and digits");
+        }
+    }
+
+    public boolean isValidIpFormat(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return false;
+        }
+
+        try {
+            InetAddress address = InetAddress.getByName(ip);
+            return address.getHostAddress().equals(ip) || address.getHostName().equals(ip);
+        } catch (UnknownHostException e) {
+            return false;
         }
     }
 

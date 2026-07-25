@@ -26,6 +26,4 @@ public class GeoIpController {
     public ResponseEntity<GeoIpResponse> getGeoIpByIp(@PathVariable String ip) {
         return ResponseEntity.status(HttpStatus.OK).body(geoIpService.lookup(ip));
     }
-
-
 }

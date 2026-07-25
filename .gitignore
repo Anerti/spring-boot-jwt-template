@@ -36,5 +36,8 @@ out/
 .env
 .obsidian/
 
+### MaxMind GeoIP ###
+*.mmdb
+
 ### VS Code ###
 .vscode/

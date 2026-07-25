@@ -272,6 +272,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GeoIpResponse'
+        '400':
+          description: Invalid IP address format (e.g. from malformed X-Forwarded-For header)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 400
+                error: Bad Request
+                message: Invalid IP address format
+                timestamp: 2026-07-25T12:00:00Z
         '404':
           description: IP address not found in database
           content:
@@ -770,7 +781,7 @@ components:
     # ── GeoIP ──
     GeoIpResponse:
       type: object
-      required: [ip, latitude, longitude]
+      required: [ip]
       properties:
         ip:
           type: string
@@ -799,9 +810,11 @@ components:
         latitude:
           type: number
           format: double
+          nullable: true
         longitude:
           type: number
           format: double
+          nullable: true
       example:
         ip: 8.8.8.8
         city: Mountain View

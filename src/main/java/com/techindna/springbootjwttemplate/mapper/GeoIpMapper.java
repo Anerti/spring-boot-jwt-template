@@ -21,8 +21,8 @@ public class GeoIpMapper {
                 getName(response.getMostSpecificSubdivision()),
                 response.getPostal() != null ? response.getPostal().getCode() : null,
                 response.getLocation() != null ? response.getLocation().getTimeZone() : null,
-                response.getLocation() != null ? response.getLocation().getLatitude() : 0.0,
-                response.getLocation() != null ? response.getLocation().getLongitude() : 0.0
+                response.getLocation() != null ? response.getLocation().getLatitude() : null,
+                response.getLocation() != null ? response.getLocation().getLongitude() : null
         );
     }
 
