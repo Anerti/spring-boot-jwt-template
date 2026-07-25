@@ -84,7 +84,7 @@ paths:
     get:
       operationId: verifyRegistration
       summary: Verify email and activate the account
-      description: Validates the UUID verification token against the pending user record, sets verified=true, and returns a JWT token. The token expires after 15 minutes. This endpoint is also invoked after POST /auth/login (for unverified accounts) and DELETE /users/{userId} (for account deletion confirmation).
+      description: Validates the UUID verification token against the pending user record, sets verified=true, and returns a JWT token. The token expires after 15 minutes. This endpoint is also invoked after POST /auth/login and DELETE /users/{userId} (for account deletion confirmation).
       tags: [Auth]
       parameters:
         - name: token
@@ -101,17 +101,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VerifyRegistrationResponse'
-        '422':
-          description: Validation failure
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 422
-                error: Unprocessable Entity
-                message: Token must be a valid UUID
-                timestamp: 2026-07-20T15:00:00Z
         '401':
           description: Invalid verification token
           content:
@@ -122,17 +111,6 @@ paths:
                 status: 401
                 error: Unauthorized
                 message: Invalid verification token
-                timestamp: 2026-07-20T15:00:00Z
-        '410':
-          description: Verification token expired
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 410
-                error: Gone
-                message: Verification token has expired
                 timestamp: 2026-07-20T15:00:00Z
 
   /auth/login:

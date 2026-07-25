@@ -10,17 +10,14 @@ import com.techindna.springbootjwttemplate.entity.User;
 import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
-import com.techindna.springbootjwttemplate.exception.http.GoneException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
 import com.techindna.springbootjwttemplate.mapper.AuthMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
-import com.techindna.springbootjwttemplate.validator.DataValidator;
 import com.techindna.springbootjwttemplate.validator.UserValidator;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -54,7 +51,6 @@ public class AuthService {
     private final AuthRepository authRepository;
     private final AuthMapper authMapper;
     private final UserValidator userValidator;
-    private final DataValidator dataValidator;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final VerificationCodeStore verificationCodeStore;
@@ -147,30 +143,22 @@ public class AuthService {
     }
 
     @Transactional
-    public VerifyRegistrationResponse verify(String code, String email) {
-        dataValidator.validateCode(code);
-        dataValidator.validateEmail("email", email);
+    public VerifyRegistrationResponse verify(UUID token) {
+        String tokenStr = token.toString();
+        String email = verificationCodeStore.getEmailByToken(tokenStr)
+                .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
 
-        String normalizedEmail = email.strip().toLowerCase();
-
-        JUser jUser = authRepository.findByEmail(normalizedEmail)
-                .orElseThrow(() -> new UnauthorizedException("Invalid verification code"));
-
-        String storedCode = verificationCodeStore.getCodeByEmail(normalizedEmail)
-                .orElseThrow(() -> new GoneException("Verification code has expired"));
-
-        if (!MessageDigest.isEqual(storedCode.getBytes(), code.getBytes())) {
-            throw new UnauthorizedException("Invalid verification code");
-        }
+        JUser jUser = authRepository.findByEmail(email)
+                .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
 
         jUser.setVerified(true);
         authRepository.save(jUser);
-        verificationCodeStore.delete(normalizedEmail);
+        verificationCodeStore.deleteByToken(tokenStr);
 
-        String token = jwtTokenProvider.generateToken(jUser.getId().toString(), jUser.getRole().name());
+        String jwtToken = jwtTokenProvider.generateToken(jUser.getId().toString(), jUser.getRole().name());
         User user = authMapper.toDomain(jUser);
 
-        return new VerifyRegistrationResponse(token, user);
+        return new VerifyRegistrationResponse(jwtToken, user);
     }
 
     private static String generateCode() {
