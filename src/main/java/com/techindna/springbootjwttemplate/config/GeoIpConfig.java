@@ -12,6 +12,6 @@ import java.io.IOException;
 public class GeoIpConfig {
     @Bean(destroyMethod = "close")
     public DatabaseReader geoIpCityReader(@Value("${geoip.database-path}") Resource databasePath) throws IOException {
-        return new DatabaseReader.Builder(databasePath.getFile()).build();
+        return new DatabaseReader.Builder(databasePath.getInputStream()).build();
     }
 }
