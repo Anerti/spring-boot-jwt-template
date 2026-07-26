@@ -27,8 +27,4 @@ public class VerificationCodeStore {
         redis.delete(KEY_PREFIX + token);
     }
 
-    public void save(String email, String code) {
-        redis.opsForValue().set(KEY_PREFIX + email, code, TTL);
-    }
-
 }

@@ -116,8 +116,8 @@ paths:
   /auth/login:
     post:
       operationId: login
-      summary: Authenticate and request a verification code
-      description: Validates credentials (username or email + password), generates a 6-char verification code (A-Z0-9), and sends it by email. The code expires after 15 minutes. Complete login via GET /auth/verification.
+      summary: Authenticate and request a verification link
+      description: Validates credentials (username or email + password), generates a UUID verification token stored in Redis, and sends a verification link by email. The token expires after 15 minutes. Complete login via GET /auth/verification/{token}.
       tags: [Auth]
       requestBody:
         required: true
@@ -127,13 +127,13 @@ paths:
               $ref: '#/components/schemas/LoginInput'
       responses:
         '202':
-          description: Credentials validated, verification code sent by email
+          description: Credentials validated, verification link sent by email
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageBody'
               example:
-                message: A verification code has been sent to your email
+                message: A verification link has been sent to your email
         '422':
           description: Validation failure
           content:
@@ -168,11 +168,11 @@ paths:
                 message: Account has been locked
                 timestamp: 2026-07-20T15:00:00Z
 
-  /auth/resend-code:
+  /auth/resend-link:
     post:
-      operationId: resendVerificationCode
-      summary: Resend verification code
-      description: Generates a new 6-char verification code (A-Z0-9) and sends it by email. Use this when the previous code expired or was not received. The code expires after 15 minutes.
+      operationId: resendVerificationLink
+      summary: Resend verification link
+      description: Generates a new UUID verification token and sends a verification link by email. Use this when the previous token expired or was not received. The token expires after 15 minutes. Complete verification via GET /auth/verification/{token}.
       tags: [Auth]
       parameters:
         - name: email
@@ -182,16 +182,16 @@ paths:
             type: string
             format: email
             maxLength: 100
-          description: Email address of the account to resend the verification code to
+          description: Email address of the account to resend the verification link to
       responses:
         '202':
-          description: Verification code regenerated and sent by email
+          description: Verification link regenerated and sent by email
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageBody'
               example:
-                message: A verification code has been sent to your email
+                message: A verification link has been sent to your email
         '422':
           description: Email format validation failure
           content:
@@ -725,7 +725,7 @@ components:
           type: string
           description: Human-readable message
       example:
-        message: A verification code has been sent to your email
+        message: A verification link has been sent to your email
 
     # ── Shared error body ──
     ErrorBody:
