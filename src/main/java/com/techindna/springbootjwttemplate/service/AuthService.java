@@ -15,6 +15,7 @@ import com.techindna.springbootjwttemplate.mapper.AuthMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
+import com.techindna.springbootjwttemplate.validator.DataValidator;
 import com.techindna.springbootjwttemplate.validator.UserValidator;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -45,6 +46,7 @@ public class AuthService {
     private final AuthRepository authRepository;
     private final AuthMapper authMapper;
     private final UserValidator userValidator;
+    private final DataValidator dataValidator;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final VerificationCodeStore verificationCodeStore;
@@ -59,12 +61,10 @@ public class AuthService {
         userValidator.validateRegistration(request);
         String encodedPassword = passwordEncoder.encode(request.getPassword());
         String email = request.getEmail().strip().toLowerCase();
-        String token = UUID.randomUUID().toString();
 
         try {
             authRepository.save(authMapper.toEntity(request, encodedPassword));
             authRepository.flush();
-            verificationCodeStore.saveToken(email, token);
         } catch (DataIntegrityViolationException e) {
             String constraint = e.getMostSpecificCause().getMessage();
             if (constraint != null && constraint.contains("email")) {
@@ -76,21 +76,8 @@ public class AuthService {
             throw e;
         }
 
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
-
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("verificationUrl", verificationUrl);
-        variables.put("firstName", request.getFirstName().strip());
-        variables.put("lastName", request.getLastName().strip());
-        variables.put("username", request.getUsername().strip());
-        variables.put("email", email);
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(
-                email,
-                "Email Verification",
-                "mail/verification",
-                variables));
+        sendVerificationLink(email, request.getFirstName().strip(), request.getLastName().strip(),
+                request.getUsername().strip(), "Email Verification", "mail/verification", servletRequest);
 
         return new MessageBody("An email has been sent to verify your account");
     }
@@ -113,21 +100,8 @@ public class AuthService {
             throw new ForbiddenException("Account has not been verified");
         }
 
-        String email = jUser.getEmail();
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(email, token);
-
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
-
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("verificationUrl", verificationUrl);
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(
-                email,
-                "Login Verification",
-                "mail/login-verification",
-                variables));
+        sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
+                jUser.getUsername(), "Login Verification", "mail/login-verification", servletRequest);
 
         return new MessageBody("A verification link has been sent to your email");
     }
@@ -152,6 +126,42 @@ public class AuthService {
         User user = authMapper.toDomain(jUser);
 
         return new VerifyRegistrationResponse(jwtToken, user);
+    }
+
+    @Transactional
+    public MessageBody resendVerificationLink(String email, HttpServletRequest servletRequest) {
+        dataValidator.validateEmail("email", email);
+
+        String normalizedEmail = email.strip().toLowerCase();
+        JUser jUser = authRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new ForbiddenException("No pending verification"));
+
+        if (jUser.getVerified()) {
+            throw new ForbiddenException("No pending verification");
+        }
+
+        sendVerificationLink(normalizedEmail, jUser.getFirstName(), jUser.getLastName(),
+                jUser.getUsername(), "Email Verification", "mail/verification", servletRequest);
+
+        return new MessageBody("A verification link has been sent to your email");
+    }
+
+    private void sendVerificationLink(String email, String firstName, String lastName,
+            String username, String subject, String template, HttpServletRequest servletRequest) {
+        String token = UUID.randomUUID().toString();
+        verificationCodeStore.saveToken(email, token);
+
+        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("verificationUrl", verificationUrl);
+        variables.put("firstName", firstName);
+        variables.put("lastName", lastName);
+        variables.put("username", username);
+        variables.put("email", email);
+        addClientData(variables, servletRequest);
+
+        emailService.sendMail(new EmailDetails(email, subject, template, variables));
     }
 
     private GeoIpResponse resolveGeoData(HttpServletRequest request) {
