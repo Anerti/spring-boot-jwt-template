@@ -11,7 +11,7 @@ import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
-import com.techindna.springbootjwttemplate.mapper.AuthMapper;
+import com.techindna.springbootjwttemplate.mapper.UserMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
@@ -44,7 +44,7 @@ public class AuthService {
             DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
 
     private final AuthRepository authRepository;
-    private final AuthMapper authMapper;
+    private final UserMapper userMapper;
     private final UserValidator userValidator;
     private final DataValidator dataValidator;
     private final PasswordEncoder passwordEncoder;
@@ -63,7 +63,7 @@ public class AuthService {
         String email = request.getEmail().strip().toLowerCase();
 
         try {
-            authRepository.save(authMapper.toEntity(request, encodedPassword));
+            authRepository.save(userMapper.toEntity(request, encodedPassword));
             authRepository.flush();
         } catch (DataIntegrityViolationException e) {
             String constraint = e.getMostSpecificCause().getMessage();
@@ -123,7 +123,7 @@ public class AuthService {
         verificationCodeStore.deleteByToken(tokenStr);
 
         String jwtToken = jwtTokenProvider.generateToken(jUser.getId().toString(), jUser.getRole().name());
-        User user = authMapper.toDomain(jUser);
+        User user = userMapper.toDomain(jUser);
 
         return new VerifyRegistrationResponse(jwtToken, user);
     }

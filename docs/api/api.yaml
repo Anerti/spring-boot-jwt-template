@@ -428,6 +428,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to access this resource
+                timestamp: 2026-07-20T15:00:00Z
         '404':
           description: Resource not found
           content:

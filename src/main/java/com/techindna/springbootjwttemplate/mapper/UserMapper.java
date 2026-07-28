@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class AuthMapper {
+public class UserMapper {
 
     public JUser toEntity(RegisterInput request, String encodedPassword) {
         return JUser.builder()
