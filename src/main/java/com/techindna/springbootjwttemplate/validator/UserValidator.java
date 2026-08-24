@@ -2,6 +2,7 @@ package com.techindna.springbootjwttemplate.validator;
 
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
+import com.techindna.springbootjwttemplate.dto.UpdateUserInput;
 import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -41,5 +42,17 @@ public class UserValidator {
         dataValidator.validateName("lastName", request.getLastName());
 
         dataValidator.validateUsername(request.getUsername());
+    }
+
+    public void validateUpdate(UpdateUserInput input) {
+        if (input.getUsername() != null && !input.getUsername().isBlank()) {
+            dataValidator.validateUsername(input.getUsername());
+        }
+        if (input.getFirstName() != null && !input.getFirstName().isBlank()) {
+            dataValidator.validateName("firstName", input.getFirstName());
+        }
+        if (input.getLastName() != null && !input.getLastName().isBlank()) {
+            dataValidator.validateName("lastName", input.getLastName());
+        }
     }
 }
