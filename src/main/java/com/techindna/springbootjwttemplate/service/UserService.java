@@ -40,19 +40,7 @@ public class UserService {
 
         resourcesAccessRules.grantAccessFor(userId, jUser.getRole());
 
-        userValidator.validateUpdate(input);
-
-        if (input.getUsername() != null && !input.getUsername().isBlank()) {
-            jUser.setUsername(input.getUsername().strip());
-        }
-
-        if (input.getFirstName() != null && !input.getFirstName().isBlank()) {
-            jUser.setFirstName(input.getFirstName().strip());
-        }
-
-        if (input.getLastName() != null && !input.getLastName().isBlank()) {
-            jUser.setLastName(input.getLastName().strip());
-        }
+        userValidator.validateAndApplyUpdate(input, jUser);
 
         try {
             userRepository.saveAndFlush(jUser);

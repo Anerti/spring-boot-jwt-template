@@ -4,6 +4,7 @@ import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UpdateUserInput;
 import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
+import com.techindna.springbootjwttemplate.repository.model.JUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -44,15 +45,18 @@ public class UserValidator {
         dataValidator.validateUsername(request.getUsername());
     }
 
-    public void validateUpdate(UpdateUserInput input) {
+    public void validateAndApplyUpdate(UpdateUserInput input, JUser jUser) {
         if (input.getUsername() != null && !input.getUsername().isBlank()) {
             dataValidator.validateUsername(input.getUsername());
+            jUser.setUsername(input.getUsername().strip());
         }
         if (input.getFirstName() != null && !input.getFirstName().isBlank()) {
             dataValidator.validateName("firstName", input.getFirstName());
+            jUser.setFirstName(input.getFirstName().strip());
         }
         if (input.getLastName() != null && !input.getLastName().isBlank()) {
             dataValidator.validateName("lastName", input.getLastName());
+            jUser.setLastName(input.getLastName().strip());
         }
     }
 }
