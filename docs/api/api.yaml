@@ -717,23 +717,12 @@ components:
         username:
           type: string
           maxLength: 50
-        password:
-          type: string
-          minLength: 8
-          maxLength: 255
-          writeOnly: true
         firstName:
           type: string
           maxLength: 100
         lastName:
           type: string
           maxLength: 100
-        email:
-          type: string
-          format: email
-          maxLength: 100
-        role:
-          $ref: '#/components/schemas/UserRole'
       example:
         firstName: Jonathan
         lastName: Doe
