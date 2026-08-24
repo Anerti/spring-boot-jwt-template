@@ -488,19 +488,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
-        '422':
-          description: Validation failure
+        '401':
+          description: Missing or invalid authentication token
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
               example:
-                status: 422
-                error: Unprocessable Entity
-                message: Email must be a valid email address
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient privileges
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to access this resource
                 timestamp: 2026-07-20T15:00:00Z
         '404':
-          description: Resource not found
+          description: User not found
           content:
             application/json:
               schema:
@@ -511,7 +522,7 @@ paths:
                 message: User not found
                 timestamp: 2026-07-20T15:00:00Z
         '409':
-          description: Username or email already exists
+          description: Username already exists
           content:
             application/json:
               schema:
@@ -519,10 +530,10 @@ paths:
               example:
                 status: 409
                 error: Conflict
-                message: Email is already taken
+                message: Cannot use this username
                 timestamp: 2026-07-20T15:00:00Z
         '422':
-          description: Business rule violation
+          description: Validation failure
           content:
             application/json:
               schema:
@@ -530,7 +541,7 @@ paths:
               example:
                 status: 422
                 error: Unprocessable Entity
-                message: Cannot change role of a SUPER_ADMIN user
+                message: Username must start with a letter and contain only letters, digits, underscores, and hyphens
                 timestamp: 2026-07-20T15:00:00Z
 
     delete:
