@@ -132,7 +132,7 @@ JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew spotlessApply
 - **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. ADMIN→CUSTOMER; self-only
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
 - **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`, `/geoip`)
-- **GeoIP**: MaxMind MMDB in `resources/geoip/`, read via `classpath:`, manual DB updates
+- **GeoIP**: MaxMind MMDB — either `classpath:geoip/GeoLite2-City.mmdb` (bundled in `src/main/resources/geoip/`) or `file:/mnt/geoip/GeoLite2-City.mmdb` (NFS-mounted from a VPS). Configured via `geoip.database-path` in `.env`/`application.properties`. Update the file manually — re-download from MaxMind and replace it (and for NFS, re-export on the VPS).
 - **Docs language**: English for API descriptions, French for user-facing instructions
 - **Commits**: one commit per logical change, conventional format
 - **Code style**: English-only, no comments/docstrings, short focused functions, explicit constructors over `@AllArgsConstructor`
