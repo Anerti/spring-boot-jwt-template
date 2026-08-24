@@ -2,7 +2,7 @@
 
 ## Stack
 
-Java 21 · Spring Boot 4.1.0 · Spring Data JPA · Spring WebMVC · PostgreSQL · Redis · Thymeleaf · MaxMind GeoIP2 · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
+Java 26 · Spring Boot 4.1.0 · Spring Data JPA · Spring WebMVC · PostgreSQL · Redis · Thymeleaf · MaxMind GeoIP2 · Lombok · Gradle 9.5.1 · OpenAPI 3.0.3
 
 ## Project structure
 
@@ -104,20 +104,20 @@ src/main/resources/
 ## Common commands
 
 ```bash
-# build (JDK 21 toolchain required)
-JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew build
+# build (JDK 26 toolchain required)
+JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew build
 
 # test
-JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew test
+JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew test
 
 # run
-JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew bootRun
+JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew bootRun
 
 # format
-JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew spotlessApply
+JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew spotlessApply
 ```
 
-> `JAVA_HOME` must point to JDK 21 — the system default may be newer (JDK 26) and Gradle 9.5.1 rejects it.
+> `JAVA_HOME` must point to JDK 26 — the system default is JDK 26.
 
 ## Conventions
 
@@ -139,7 +139,7 @@ JAVA_HOME=$HOME/.jdks/ms-21.0.11 ./gradlew spotlessApply
 
 ## Common pitfalls
 
-- **JDK version**: system default is JDK 26 but Gradle 8.5+ rejects it. Always prefix with `JAVA_HOME=$HOME/.jdks/ms-21.0.11`. Never set `org.gradle.java.home` in `gradle.properties` (Gradle rejects it).
+- **JDK version**: system default is JDK 26. Always prefix with `JAVA_HOME=$HOME/.jdks/ms-26.0.2`. Never set `org.gradle.java.home` in `gradle.properties` (Gradle rejects it).
 - **`.env` is gitignored**: secrets go in `.env`, never committed.
 - **`docs/` contains an Obsidian vault**: `.obsidian/` is gitignored.
 - **Partial implementation**: POST /auth/register, POST /auth/login, GET /auth/verification, and GET /auth/resend-code implemented. Users CRUD still planned. The OpenAPI spec (`docs/api/api.yaml`) is the source of truth for endpoints.

@@ -10,7 +10,7 @@ description = 'spring-boot-jwt-template'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(26)
     }
 }
 
