@@ -500,7 +500,7 @@ paths:
                 message: Missing or invalid authentication token
                 timestamp: 2026-07-20T15:00:00Z
         '403':
-          description: Insufficient privileges
+          description: Insufficient privileges or user not found
           content:
             application/json:
               schema:
@@ -509,17 +509,6 @@ paths:
                 status: 403
                 error: Forbidden
                 message: Insufficient privileges to access this resource
-                timestamp: 2026-07-20T15:00:00Z
-        '404':
-          description: User not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 404
-                error: Not Found
-                message: User not found
                 timestamp: 2026-07-20T15:00:00Z
         '409':
           description: Username already exists
