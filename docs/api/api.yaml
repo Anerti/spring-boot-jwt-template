@@ -226,6 +226,163 @@ paths:
                 message: Failed to send verification email
                 timestamp: 2026-07-20T15:00:00Z
 
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      summary: Request a password change
+      description: Validates the caller's current credentials (username or email + current password), confirms the new password matches the confirmation field, generates a UUID verification token stored in Redis, and sends a confirmation link by email. The token expires after 15 minutes. Complete the password change via GET /auth/verification/{token}. The old password remains valid until the new one is confirmed. This endpoint requires authentication.
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordInput'
+      responses:
+        '202':
+          description: Credentials validated, verification link sent by email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageBody'
+              example:
+                message: A verification link has been sent to your email to confirm the password change
+        '401':
+          description: Missing or invalid authentication token or wrong credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Invalid credentials
+                timestamp: 2026-07-20T15:00:00Z
+        '422':
+          description: Validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              examples:
+                passwordTooShort:
+                  summary: Password too short
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: New password must be at least 12 characters
+                    timestamp: 2026-07-20T15:00:00Z
+                passwordsDoNotMatch:
+                  summary: Passwords do not match
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: New password and confirmation do not match
+                    timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Account not verified or business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Account has not been verified
+                timestamp: 2026-07-20T15:00:00Z
+        '500':
+          description: Failed to send verification email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 500
+                error: Internal Server Error
+                message: Failed to send verification email
+                timestamp: 2026-07-20T15:00:00Z
+
+  /auth/change-email:
+    post:
+      operationId: changeEmail
+      summary: Request an email change
+      description: Validates the caller's current credentials (username or email + password), generates a UUID verification token stored in Redis, and sends a confirmation link by email to the new address. The token expires after 15 minutes. Complete the email change via GET /auth/verification/{token}. The old email remains in use until the new address is verified. This endpoint requires authentication.
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeEmailInput'
+      responses:
+        '202':
+          description: Credentials validated, verification link sent to the new email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageBody'
+              example:
+                message: A verification link has been sent to your new email address
+        '401':
+          description: Missing or invalid authentication token or wrong credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Invalid credentials
+                timestamp: 2026-07-20T15:00:00Z
+        '422':
+          description: Validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 422
+                error: Unprocessable Entity
+                message: New email must be a valid email address
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Account not verified or business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Account has not been verified
+                timestamp: 2026-07-20T15:00:00Z
+        '409':
+          description: The new email is already in use by another account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 409
+                error: Conflict
+                message: This email address is already in use
+                timestamp: 2026-07-20T15:00:00Z
+        '500':
+          description: Failed to send verification email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 500
+                error: Internal Server Error
+                message: Failed to send verification email
+                timestamp: 2026-07-20T15:00:00Z
+
   # ──────────────── GeoIP ────────────────
   /geoip:
     get:
@@ -732,6 +889,48 @@ components:
       example:
         firstName: Jonathan
         lastName: Doe
+
+    # ── Change password input ──
+    ChangePasswordInput:
+      type: object
+      required: [oldPassword, newPassword, confirmNewPassword]
+      properties:
+        oldPassword:
+          type: string
+          writeOnly: true
+          description: Current password for authentication
+        newPassword:
+          type: string
+          minLength: 12
+          maxLength: 255
+          writeOnly: true
+          description: New password to set
+        confirmNewPassword:
+          type: string
+          writeOnly: true
+          description: Must match newPassword
+      example:
+        oldPassword: oldP@ssw0rd!
+        newPassword: n3w$ecur3P@ss!
+        confirmNewPassword: n3w$ecur3P@ss!
+
+    # ── Change email input ──
+    ChangeEmailInput:
+      type: object
+      required: [newEmail, password]
+      properties:
+        newEmail:
+          type: string
+          format: email
+          maxLength: 100
+          description: The new email address to switch to
+        password:
+          type: string
+          writeOnly: true
+          description: Current password for authentication
+      example:
+        newEmail: newemail@example.com
+        password: s3cur3P@ss
 
     # ── Simple message body ──
     MessageBody:
