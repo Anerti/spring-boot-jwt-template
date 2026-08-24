@@ -85,16 +85,18 @@ Host (`smtp.gmail.com`) and port (`587`) are configured in `application.properti
 
 ### GeoIP Configuration
 
-The application uses MaxMind GeoLite2-City for IP geolocation. The MMDB database file is bundled at `src/main/resources/geoip/GeoLite2-City.mmdb`.
+The application uses MaxMind GeoLite2-City for IP geolocation.
 
-Properties in `application.properties`:
+**Option A — bundled:** place `GeoLite2-City.mmdb` at `src/main/resources/geoip/` and set `geoip.database-path=classpath:geoip/GeoLite2-City.mmdb` in `application.properties`.
+
+**Option B — NFS-mounted from a VPS:** mount the MMDB over NFS (read-only) onto the app server (e.g. `/mnt/geoip/GeoLite2-City.mmdb`) and set `geoip.database-path=file:/mnt/geoip/GeoLite2-City.mmdb` via `.env` or `application.properties`.
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `geoip.database-path` | `classpath:geoip/GeoLite2-City.mmdb` | Path to the MaxMind MMDB file |
+| `geoip.database-path` | `classpath:geoip/GeoLite2-City.mmdb` | Path to the MaxMind MMDB file (`classpath:` or `file:`) |
 | `geoip.trust-x-forwarded-for` | `true` | Use `X-Forwarded-For` header for client IP |
 
-To update the database, download a new `GeoLite2-City.mmdb` from [MaxMind](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) and replace the file in `src/main/resources/geoip/`.
+To update the database: download a new `GeoLite2-City.mmdb` from [MaxMind](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) and, for the bundled option, replace the file at `src/main/resources/geoip/GeoLite2-City.mmdb`; for the NFS option, replace the file on the VPS at `/srv/geoip/GeoLite2-City.mmdb` and ensure the export is still active (`sudo exportfs -ra`).
 
 ## Getting Started
 
