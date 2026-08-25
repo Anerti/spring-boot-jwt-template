@@ -1,6 +1,7 @@
 package com.techindna.springbootjwttemplate.repository.model;
 
 import com.techindna.springbootjwttemplate.entity.enums.UserRole;
+import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -51,6 +52,11 @@ public class JUser {
     @Column(name = "role", nullable = false)
     @Builder.Default
     private UserRole role = UserRole.CUSTOMER;
+
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false)
+    @Builder.Default
+    private UserStatus status = UserStatus.ACTIVE;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
