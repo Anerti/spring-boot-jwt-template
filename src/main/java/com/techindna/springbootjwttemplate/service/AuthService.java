@@ -13,10 +13,15 @@ import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
 import com.techindna.springbootjwttemplate.mapper.UserMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
+import com.techindna.springbootjwttemplate.repository.HostRepository;
+import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
+import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
+import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
 import com.techindna.springbootjwttemplate.validator.UserValidator;
+import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -42,6 +47,7 @@ public class AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final DateTimeFormatter REGISTERED_AT_FORMAT =
             DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
+    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
 
     private final AuthRepository authRepository;
     private final UserMapper userMapper;
@@ -52,6 +58,8 @@ public class AuthService {
     private final VerificationCodeStore verificationCodeStore;
     private final JwtTokenProvider jwtTokenProvider;
     private final GeoIpService geoIpService;
+    private final HostRepository hostRepository;
+    private final FailedLoginTracker failedLoginTracker;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -92,18 +100,46 @@ public class AuthService {
                 authRepository.findByUsername(request.getUsername().strip())
                         .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
-        if (!passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            throw new UnauthorizedException("Invalid credentials");
+        if (UserStatus.LOCKED == jUser.getStatus()) {
+            logHost(jUser.getId(), servletRequest, "Login attempt on locked account");
+            throw new ForbiddenException("Account locked");
         }
 
-        if (!jUser.getVerified()) {
-            throw new ForbiddenException("Account has not been verified");
+        if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
+            if (!jUser.getVerified()) {
+                throw new ForbiddenException("Account has not been verified");
+            }
+            sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
+                    jUser.getUsername(), "Login Verification", "mail/login-verification", servletRequest);
+            return new MessageBody("A verification link has been sent to your email");
         }
 
-        sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
-                jUser.getUsername(), "Login Verification", "mail/login-verification", servletRequest);
+        int failedCount = failedLoginTracker.increment(jUser.getId());
+        logHost(jUser.getId(), servletRequest, "Login failed: invalid credentials");
 
-        return new MessageBody("A verification link has been sent to your email");
+        if (failedCount >= MAX_FAILED_LOGIN_ATTEMPTS) {
+            jUser.setStatus(UserStatus.LOCKED);
+            authRepository.save(jUser);
+            throw new ForbiddenException("Account has been locked due to multiple failed logins");
+        }
+
+        throw new UnauthorizedException("Invalid credentials.");
+    }
+
+    private void logHost(UUID userId, HttpServletRequest servletRequest, String description) {
+        String ipAddress = geoIpService.extractClientIp(servletRequest);
+        String rawUserAgent = servletRequest.getHeader("User-Agent");
+
+        JHost host = hostRepository.findByIpAddressAndUserId(ipAddress, userId)
+                .orElseGet(() -> JHost.builder()
+                        .userId(userId)
+                        .ipAddress(ipAddress)
+                        .userAgent((rawUserAgent != null && !rawUserAgent.isBlank()) ? rawUserAgent : "Unknown")
+                        .description(description)
+                        .build());
+
+        host.setLoginFailed(true);
+        hostRepository.save(host);
     }
 
     @Transactional
