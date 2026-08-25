@@ -718,6 +718,224 @@ paths:
                 message: User not found
                 timestamp: 2026-07-20T15:00:00Z
 
+  # ──────────────── Hosts ────────────────
+  /hosts:
+    get:
+      operationId: listHosts
+      summary: List hosts (paginated)
+      description: Returns a paginated list of host records visible to the authenticated caller. Any authenticated user can call this endpoint, but without an explicit userId filter the list is scoped to the caller's own hosts — a non-admin caller cannot see another user's hosts. When userId is provided the caller must be an admin or the owner of the targeted user; otherwise the request is rejected.
+      tags: [Hosts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by owner user ID
+        - name: ipAddress
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+          description: Filter by IP address (partial match)
+        - name: userAgent
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+          description: Filter by user agent string (partial match)
+        - name: loginFailed
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Filter by login-failed flag. When omitted or false, returns hosts with no failed login recorded; when true, returns hosts with a failed login attempt.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Page number (1-indexed)
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: Page size
+      responses:
+        '200':
+          description: Paginated host list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Host'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to access the requested hosts
+                timestamp: 2026-07-20T15:00:00Z
+        '422':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 422
+                error: Unprocessable Entity
+                message: Page size must be between 1 and 100
+                timestamp: 2026-07-20T15:00:00Z
+
+  /hosts/{hostId}:
+    get:
+      operationId: getHost
+      summary: Get a host by ID
+      description: Returns a single host record by its ID, including geolocation data for its IP. Any authenticated user can call this endpoint, but a non-admin caller can only retrieve hosts they own — attempting to access another user's host is rejected.
+      tags: [Hosts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: hostId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Host record with geolocation data for its IP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Host'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to access this host
+                timestamp: 2026-07-20T15:00:00Z
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 404
+                error: Not Found
+                message: Host not found
+                timestamp: 2026-07-20T15:00:00Z
+
+    patch:
+      operationId: banHost
+      summary: Ban a host
+      description: Sets the host status to banned. This is the only status transition exposed through the API — use it to revoke a host's access, for example after repeated failed login attempts. The status cannot be changed back to active or inactive through this endpoint.
+      tags: [Hosts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: hostId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BanHostInput'
+      responses:
+        '200':
+          description: Host status set to banned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Host'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient privileges or host not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to access this resource
+                timestamp: 2026-07-20T15:00:00Z
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 404
+                error: Not Found
+                message: Host not found
+                timestamp: 2026-07-20T15:00:00Z
+
 components:
   securitySchemes:
     bearerAuth:
@@ -734,6 +952,11 @@ components:
       type: string
       enum: [active, inactive, locked]
       description: Account status
+
+    HostStatus:
+      type: string
+      enum: [active, inactive, banned]
+      description: Host status — the only status transition through the API is to banned, via PATCH /hosts/{hostId}.
 
     # ── Auth ──
     RegisterInput:
@@ -876,6 +1099,105 @@ components:
         userStatus: active
         createdAt: 2026-07-20T14:00:00Z
         updatedAt: null
+
+    # ── Hosts ──
+    Host:
+      type: object
+      required: [id, userId, ipAddress, userAgent, hostStatus, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+          description: Owner user ID
+        ipAddress:
+          type: string
+          maxLength: 255
+        userAgent:
+          type: string
+          maxLength: 512
+        hostStatus:
+          $ref: '#/components/schemas/HostStatus'
+        loginFailed:
+          type: boolean
+          description: Whether the host has a failed login attempt recorded
+        geo:
+          type: object
+          description: Geolocation data for the host's IP address (derived from the GeoIP service)
+          properties:
+            city:
+              type: string
+              nullable: true
+            country:
+              type: string
+              nullable: true
+            countryCode:
+              type: string
+              nullable: true
+            continent:
+              type: string
+              nullable: true
+            subdivision:
+              type: string
+              nullable: true
+            postalCode:
+              type: string
+              nullable: true
+            timezone:
+              type: string
+              nullable: true
+            latitude:
+              type: number
+              format: double
+              nullable: true
+            longitude:
+              type: number
+              format: double
+              nullable: true
+        description:
+          type: string
+          maxLength: 100
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        userId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        ipAddress: 203.0.113.42
+        userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+        hostStatus: active
+        loginFailed: false
+        geo:
+          city: Mountain View
+          country: United States
+          countryCode: US
+          continent: North America
+          subdivision: California
+          postalCode: 94043
+          timezone: America/Los_Angeles
+          latitude: 37.386
+          longitude: -122.084
+        description: Office workstation
+        createdAt: 2026-07-20T14:00:00Z
+        updatedAt: null
+
+    BanHostInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [banned]
+          description: The only value accepted by the API — sets the host status to banned
+      example:
+        status: banned
 
     # ── Update input ──
     UpdateUserInput:
@@ -1020,6 +1342,81 @@ components:
         timezone: America/Los_Angeles
         latitude: 37.386
         longitude: -122.084
+
+    # ── Host GeoIP (host detail endpoint, ip omitted) ──
+    HostGeoIpResponse:
+      type: object
+      properties:
+        city:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        countryCode:
+          type: string
+          nullable: true
+        continent:
+          type: string
+          nullable: true
+        subdivision:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+          nullable: true
+        longitude:
+          type: number
+          format: double
+          nullable: true
+      example:
+        city: Mountain View
+        country: United States
+        countryCode: US
+        continent: North America
+        subdivision: California
+        postalCode: 94043
+        timezone: America/Los_Angeles
+        latitude: 37.386
+        longitude: -122.084
+
+    # ── Host detail (host + geo) ──
+    HostDetailResponse:
+      type: object
+      required: [host, geo]
+      properties:
+        host:
+          $ref: '#/components/schemas/Host'
+        geo:
+          $ref: '#/components/schemas/HostGeoIpResponse'
+      example:
+        host:
+          id: 550e8400-e29b-41d4-a716-446655440000
+          userId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+          ipAddress: 203.0.113.42
+          userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+          hostStatus: active
+          loginFailed: false
+          description: Office workstation
+          createdAt: 2026-07-20T14:00:00Z
+          updatedAt: null
+        geo:
+          city: Mountain View
+          country: United States
+          countryCode: US
+          continent: North America
+          subdivision: California
+          postalCode: 94043
+          timezone: America/Los_Angeles
+          latitude: 37.386
+          longitude: -122.084
 
     Meta:
       type: object
