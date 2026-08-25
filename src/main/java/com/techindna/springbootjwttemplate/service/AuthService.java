@@ -107,7 +107,7 @@ public class AuthService {
     }
 
     @Transactional
-    public VerifyRegistrationResponse verify(UUID token) {
+    public VerifyRegistrationResponse verify(UUID token, HttpServletRequest servletRequest) {
         String tokenStr = token.toString();
         String email = verificationCodeStore.getEmailByToken(tokenStr)
                 .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
@@ -119,10 +119,11 @@ public class AuthService {
             jUser.setVerified(true);
             authRepository.save(jUser);
         }
-        
+
         verificationCodeStore.deleteByToken(tokenStr);
 
-        String jwtToken = jwtTokenProvider.generateToken(jUser.getId().toString(), jUser.getRole().name());
+        String clientIp = geoIpService.extractClientIp(servletRequest);
+        String jwtToken = jwtTokenProvider.generateToken(jUser.getId().toString(), jUser.getRole().name(), clientIp);
         User user = userMapper.toDomain(jUser);
 
         return new VerifyRegistrationResponse(jwtToken, user);
