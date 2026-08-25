@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS jwt_template_app.host (
     login_failed BOOLEAN     NOT NULL DEFAULT false,
     description VARCHAR(100),
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ
+    updated_at  TIMESTAMPTZ,
     CONSTRAINT fk_user_id FOREIGN KEY (user_id)
-    REFERENCES user(id)
+    REFERENCES jwt_template_app."user"(id)
     ON DELETE CASCADE
 );

@@ -730,6 +730,11 @@ components:
       type: string
       enum: [admin, customer]
 
+    UserStatus:
+      type: string
+      enum: [active, inactive, locked]
+      description: Account status
+
     # ── Auth ──
     RegisterInput:
       type: object
@@ -803,6 +808,7 @@ components:
           lastName: Doe
           email: jdoe@example.com
           role: customer
+          userStatus: active
           createdAt: 2026-07-20T14:00:00Z
           updatedAt: null
 
@@ -824,13 +830,14 @@ components:
           lastName: Doe
           email: jdoe@example.com
           role: customer
+          userStatus: active
           createdAt: 2026-07-20T14:00:00Z
           updatedAt: null
 
     # ── Read model ──
     User:
       type: object
-      required: [id, username, firstName, lastName, email, role, createdAt]
+      required: [id, username, firstName, lastName, email, role, userStatus, createdAt]
       properties:
         id:
           type: string
@@ -850,6 +857,8 @@ components:
           maxLength: 100
         role:
           $ref: '#/components/schemas/UserRole'
+        userStatus:
+          $ref: '#/components/schemas/UserStatus'
         createdAt:
           type: string
           format: date-time
@@ -864,6 +873,7 @@ components:
         lastName: Doe
         email: jdoe@example.com
         role: customer
+        userStatus: active
         createdAt: 2026-07-20T14:00:00Z
         updatedAt: null
 
