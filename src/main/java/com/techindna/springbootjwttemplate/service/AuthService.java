@@ -102,7 +102,7 @@ public class AuthService {
                         .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
         if (UserStatus.LOCKED == jUser.getStatus()) {
-            logHost(jUser.getId(), servletRequest, "Login attempt on locked account");
+            recordHostAndCheckBan(jUser.getId(), servletRequest, "Login attempt on locked account");
             throw new ForbiddenException("Account locked");
         }
 
@@ -111,14 +111,14 @@ public class AuthService {
         }
 
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            logHost(jUser.getId(), servletRequest, "Login successful");
+            recordHostAndCheckBan(jUser.getId(), servletRequest, "Login successful");
             sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
                     jUser.getUsername(), "Login Verification", "mail/login-verification", servletRequest);
             return new MessageBody("A verification link has been sent to your email");
         }
 
         int failedCount = failedLoginTracker.increment(jUser.getId());
-        logHost(jUser.getId(), servletRequest, "Login failed: invalid credentials");
+        recordHostAndCheckBan(jUser.getId(), servletRequest, "Login failed: invalid credentials");
 
         if (failedCount == MAX_FAILED_LOGIN_ATTEMPTS) {
             jUser.setStatus(UserStatus.LOCKED);
@@ -129,7 +129,7 @@ public class AuthService {
         throw new UnauthorizedException(String.format("Invalid credentials. %s attempt(s) left", MAX_FAILED_LOGIN_ATTEMPTS - failedCount));
     }
 
-    private void logHost(UUID userId, HttpServletRequest servletRequest, String description) {
+    private void recordHostAndCheckBan(UUID userId, HttpServletRequest servletRequest, String description) {
         String ipAddress = geoIpService.extractClientIp(servletRequest);
         String rawUserAgent = servletRequest.getHeader("User-Agent");
 
