@@ -404,6 +404,73 @@ paths:
                 message: Failed to send verification email
                 timestamp: 2026-07-20T15:00:00Z
 
+  /auth/unlock:
+    post:
+      operationId: unlockAccount
+      summary: Unlock a locked user account
+      description: Unlocks a user account that was locked due to too many failed login attempts. The caller must be authenticated and either own the account or hold the ADMIN role. The account status is set back to ACTIVE and the failed-login counter is cleared in Redis. This endpoint requires authentication.
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnlockAccountInput'
+      responses:
+        '200':
+          description: Account unlocked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageBody'
+              example:
+                message: Account has been unlocked
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient privileges or account not locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              examples:
+                accountNotLocked:
+                  summary: Account is not in locked state
+                  value:
+                    status: 403
+                    error: Forbidden
+                    message: Account is not locked
+                    timestamp: 2026-07-20T15:00:00Z
+                insufficientPrivileges:
+                  summary: Caller lacks ADMIN role and is not the account owner
+                  value:
+                    status: 403
+                    error: Forbidden
+                    message: Insufficient privileges to unlock this account
+                    timestamp: 2026-07-20T15:00:00Z
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 404
+                error: Not Found
+                message: User not found
+                timestamp: 2026-07-20T15:00:00Z
+
   # ──────────────── GeoIP ────────────────
   /geoip:
     get:
@@ -1284,6 +1351,18 @@ components:
       example:
         newEmail: newemail@example.com
         password: s3cur3P@ss
+
+    # ── Unlock account input ──
+    UnlockAccountInput:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: ID of the locked account to unlock
+      example:
+        userId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 
     # ── Simple message body ──
     MessageBody:
