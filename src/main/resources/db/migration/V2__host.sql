@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS jwt_template_app.host (
     ip_address  VARCHAR(255) NOT NULL,
     user_agent  VARCHAR(512) NOT NULL,
     status      jwt_template_app.host_status NOT NULL DEFAULT 'INACTIVE',
-    login_failed BOOLEAN     NOT NULL DEFAULT false,
     description VARCHAR(100),
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ,
