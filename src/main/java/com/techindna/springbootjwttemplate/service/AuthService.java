@@ -1,5 +1,6 @@
 package com.techindna.springbootjwttemplate.service;
 
+import com.techindna.springbootjwttemplate.entity.enums.HostStatus;
 import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
@@ -90,7 +91,7 @@ public class AuthService {
         return new MessageBody("An email has been sent to verify your account");
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {ForbiddenException.class})
     public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
         userValidator.validateLogin(request);
 
@@ -105,10 +106,12 @@ public class AuthService {
             throw new ForbiddenException("Account locked");
         }
 
+        if (!jUser.getVerified()) {
+            throw new ForbiddenException("Account has not been verified");
+        }
+
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            if (!jUser.getVerified()) {
-                throw new ForbiddenException("Account has not been verified");
-            }
+            logHost(jUser.getId(), servletRequest, "Login successful");
             sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
                     jUser.getUsername(), "Login Verification", "mail/login-verification", servletRequest);
             return new MessageBody("A verification link has been sent to your email");
@@ -117,13 +120,13 @@ public class AuthService {
         int failedCount = failedLoginTracker.increment(jUser.getId());
         logHost(jUser.getId(), servletRequest, "Login failed: invalid credentials");
 
-        if (failedCount >= MAX_FAILED_LOGIN_ATTEMPTS) {
+        if (failedCount == MAX_FAILED_LOGIN_ATTEMPTS) {
             jUser.setStatus(UserStatus.LOCKED);
             authRepository.save(jUser);
             throw new ForbiddenException("Account has been locked due to multiple failed logins");
         }
 
-        throw new UnauthorizedException("Invalid credentials.");
+        throw new UnauthorizedException(String.format("Invalid credentials. %s attempt(s) left", MAX_FAILED_LOGIN_ATTEMPTS - failedCount));
     }
 
     private void logHost(UUID userId, HttpServletRequest servletRequest, String description) {
@@ -138,7 +141,10 @@ public class AuthService {
                         .description(description)
                         .build());
 
-        host.setLoginFailed(true);
+        if (host.getStatus() == HostStatus.BANNED){
+            throw new ForbiddenException(String.format("Host %s is banned from accessing this account", ipAddress));
+        }
+
         hostRepository.save(host);
     }
 
