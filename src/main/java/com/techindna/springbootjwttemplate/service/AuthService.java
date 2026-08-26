@@ -15,7 +15,9 @@ import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
 import com.techindna.springbootjwttemplate.mapper.UserMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.HostRepository;
+import com.techindna.springbootjwttemplate.repository.LogRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
+import com.techindna.springbootjwttemplate.repository.model.JEventLog;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
@@ -60,6 +62,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final GeoIpService geoIpService;
     private final HostRepository hostRepository;
+    private final LogRepository logRepository;
     private final FailedLoginTracker failedLoginTracker;
 
     @Value("${app.base-url}")
@@ -100,8 +103,10 @@ public class AuthService {
                 authRepository.findByUsername(request.getUsername().strip())
                         .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
+        JHost host = recordHostAndCheckBan(jUser.getId(), servletRequest);
+
         if (UserStatus.LOCKED == jUser.getStatus()) {
-            recordHostAndCheckBan(jUser.getId(), servletRequest, "Login attempt on locked account");
+            logHostEvent(host, "Login failed: account locked");
             throw new ForbiddenException("Account locked");
         }
 
@@ -110,25 +115,26 @@ public class AuthService {
         }
 
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            recordHostAndCheckBan(jUser.getId(), servletRequest, "Login successful");
+            logHostEvent(host, "Login successful: MFA confirmation sent");
             sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
                     jUser.getUsername(), "Login Verification", "mail/login-verification", servletRequest);
             return new MessageBody("A verification link has been sent to your email");
         }
 
         int failedCount = failedLoginTracker.increment(jUser.getId());
-        recordHostAndCheckBan(jUser.getId(), servletRequest, "Login failed: invalid credentials");
+        logHostEvent(host, "Login failed: invalid credentials");
 
         if (failedCount == MAX_FAILED_LOGIN_ATTEMPTS) {
             jUser.setStatus(UserStatus.LOCKED);
             authRepository.save(jUser);
+            logHostEvent(host, "Account locked due to multiple failure");
             throw new ForbiddenException("Account has been locked due to multiple failed logins");
         }
 
         throw new UnauthorizedException(String.format("Invalid credentials. %s attempt(s) left", MAX_FAILED_LOGIN_ATTEMPTS - failedCount));
     }
 
-    private void recordHostAndCheckBan(UUID userId, HttpServletRequest servletRequest, String description) {
+    private JHost recordHostAndCheckBan(UUID userId, HttpServletRequest servletRequest) {
         String ipAddress = geoIpService.extractClientIp(servletRequest);
         String rawUserAgent = servletRequest.getHeader("User-Agent");
 
@@ -137,14 +143,22 @@ public class AuthService {
                         .userId(userId)
                         .ipAddress(ipAddress)
                         .userAgent((rawUserAgent != null && !rawUserAgent.isBlank()) ? rawUserAgent : "Unknown")
-                        .description(description)
                         .build());
 
-        if (host.getStatus() == HostStatus.BANNED){
+        if (host.getStatus() == HostStatus.BANNED) {
             throw new ForbiddenException(String.format("Host %s is banned from accessing this account", ipAddress));
         }
 
-        hostRepository.save(host);
+        return hostRepository.saveAndFlush(host);
+    }
+
+    private void logHostEvent(JHost host, String description) {
+        JEventLog logEntry = logRepository.findByHostId(host.getId())
+                .orElseGet(() -> JEventLog.builder()
+                        .host(host)
+                        .build());
+        logEntry.setDescription(description);
+        logRepository.save(logEntry);
     }
 
     @Transactional
@@ -156,12 +170,15 @@ public class AuthService {
         JUser jUser = authRepository.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
 
+        JHost host = recordHostAndCheckBan(jUser.getId(), servletRequest);
+
         if (!jUser.getVerified()) {
             jUser.setVerified(true);
             authRepository.save(jUser);
+            logHostEvent(host, "Registration complete: account verified");
         }
 
-        recordHostAndCheckBan(jUser.getId(), servletRequest, "Verification successful: Token accepted");
+        logHostEvent(host, "Verification successful: Token accepted");
 
         verificationCodeStore.deleteByToken(tokenStr);
 
