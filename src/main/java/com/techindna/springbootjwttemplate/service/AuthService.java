@@ -153,11 +153,10 @@ public class AuthService {
     }
 
     private void logHostEvent(JHost host, String description) {
-        JEventLog logEntry = logRepository.findByHostId(host.getId())
-                .orElseGet(() -> JEventLog.builder()
-                        .host(host)
-                        .build());
-        logEntry.setDescription(description);
+        JEventLog logEntry = JEventLog.builder()
+                .host(host)
+                .description(description)
+                .build();
         logRepository.save(logEntry);
     }
 
