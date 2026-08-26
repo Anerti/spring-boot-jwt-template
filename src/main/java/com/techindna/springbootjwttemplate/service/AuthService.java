@@ -103,7 +103,7 @@ public class AuthService {
                 authRepository.findByUsername(request.getUsername().strip())
                         .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
-        JHost host = recordHostAndCheckBan(jUser.getId(), servletRequest);
+        JHost host = recordHostAndCheckBan(jUser, servletRequest);
 
         if (UserStatus.LOCKED == jUser.getStatus()) {
             logHostEvent(host, "Login failed: account locked");
@@ -134,13 +134,13 @@ public class AuthService {
         throw new UnauthorizedException(String.format("Invalid credentials. %s attempt(s) left", MAX_FAILED_LOGIN_ATTEMPTS - failedCount));
     }
 
-    private JHost recordHostAndCheckBan(UUID userId, HttpServletRequest servletRequest) {
+    private JHost recordHostAndCheckBan(JUser user, HttpServletRequest servletRequest) {
         String ipAddress = geoIpService.extractClientIp(servletRequest);
         String rawUserAgent = servletRequest.getHeader("User-Agent");
 
-        JHost host = hostRepository.findByIpAddressAndUserId(ipAddress, userId)
+        JHost host = hostRepository.findByIpAddressAndUser_Id(ipAddress, user.getId())
                 .orElseGet(() -> JHost.builder()
-                        .userId(userId)
+                        .user(user)
                         .ipAddress(ipAddress)
                         .userAgent((rawUserAgent != null && !rawUserAgent.isBlank()) ? rawUserAgent : "Unknown")
                         .build());
@@ -164,13 +164,15 @@ public class AuthService {
     @Transactional
     public VerifyRegistrationResponse verify(UUID token, HttpServletRequest servletRequest) {
         String tokenStr = token.toString();
-        String email = verificationCodeStore.getEmailByToken(tokenStr)
-                .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
+        String email = verificationCodeStore.getEmailByToken(tokenStr).orElse(null);
 
-        JUser jUser = authRepository.findByEmail(email)
-                .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
+        JUser jUser = authRepository.findByEmail(email).orElse(null);
 
-        JHost host = recordHostAndCheckBan(jUser.getId(), servletRequest);
+        if (jUser == null){
+            throw new UnauthorizedException("Invalid or expired token");
+        }
+
+        JHost host = recordHostAndCheckBan(jUser, servletRequest);
 
         if (!jUser.getVerified()) {
             jUser.setVerified(true);
