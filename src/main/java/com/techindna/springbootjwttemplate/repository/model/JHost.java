@@ -46,9 +46,6 @@ public class JHost {
     @Builder.Default
     private Boolean loginFailed = false;
 
-    @Column(name = "description", length = 100)
-    private String description;
-
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
