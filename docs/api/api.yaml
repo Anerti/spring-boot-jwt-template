@@ -102,7 +102,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/VerifyRegistrationResponse'
         '401':
-          description: Invalid verification token
+          description: Invalid or expired verification token
           content:
             application/json:
               schema:
@@ -110,7 +110,18 @@ paths:
               example:
                 status: 401
                 error: Unauthorized
-                message: Invalid verification token
+                message: Invalid or expired token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Host 203.0.113.42 is banned from accessing this account
                 timestamp: 2026-07-20T15:00:00Z
 
   /auth/login:
@@ -162,11 +173,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 403
-                error: Forbidden
-                message: Account has been locked
-                timestamp: 2026-07-20T15:00:00Z
+              examples:
+                accountLocked:
+                  summary: Account locked due to too many failed attempts
+                  value:
+                    status: 403
+                    error: Forbidden
+                    message: Account locked
+                    timestamp: 2026-07-20T15:00:00Z
+                accountNotVerified:
+                  summary: Account not yet verified
+                  value:
+                    status: 403
+                    error: Forbidden
+                    message: Account has not been verified
+                    timestamp: 2026-07-20T15:00:00Z
 
   /auth/resend-link:
     post:
