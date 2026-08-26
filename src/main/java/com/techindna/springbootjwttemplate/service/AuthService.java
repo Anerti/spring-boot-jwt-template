@@ -93,7 +93,7 @@ public class AuthService {
         return new MessageBody("An email has been sent to verify your account");
     }
 
-    @Transactional(noRollbackFor = {ForbiddenException.class})
+    @Transactional(noRollbackFor = {ForbiddenException.class, UnauthorizedException.class})
     public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
         userValidator.validateLogin(request);
 
@@ -138,6 +138,7 @@ public class AuthService {
         String ipAddress = geoIpService.extractClientIp(servletRequest);
         String rawUserAgent = servletRequest.getHeader("User-Agent");
 
+        // host status unreliable
         JHost host = hostRepository.findByIpAddressAndUser_Id(ipAddress, user.getId())
                 .orElseGet(() -> JHost.builder()
                         .user(user)
