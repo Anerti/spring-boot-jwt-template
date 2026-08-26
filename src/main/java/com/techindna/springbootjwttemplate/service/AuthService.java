@@ -124,6 +124,7 @@ public class AuthService {
         int failedCount = failedLoginTracker.increment(jUser.getId());
         logHostEvent(host, "Login failed: invalid credentials");
 
+        // TODO: send an email to notify the user about their account
         if (failedCount == MAX_FAILED_LOGIN_ATTEMPTS) {
             jUser.setStatus(UserStatus.LOCKED);
             authRepository.save(jUser);
