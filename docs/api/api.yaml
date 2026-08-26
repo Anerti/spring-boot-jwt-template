@@ -407,8 +407,8 @@ paths:
   /auth/unlock:
     post:
       operationId: unlockAccount
-      summary: Unlock a locked user account
-      description: Unlocks a user account that was locked due to too many failed login attempts. The caller must be authenticated and either own the account or hold the ADMIN role. The account status is set back to ACTIVE and the failed-login counter is cleared in Redis. This endpoint requires authentication.
+      summary: Request to unlock a locked user account
+      description: Accepts the email of the locked account and triggers the unlock flow. The service generates a UUID verification token stored in Redis and sends a verification link by email; the account is unlocked when the user completes the flow via GET /auth/verification/{token}. The token expires after 15 minutes. This endpoint requires authentication.
       tags: [Auth]
       security:
         - bearerAuth: []
@@ -419,14 +419,14 @@ paths:
             schema:
               $ref: '#/components/schemas/UnlockAccountInput'
       responses:
-        '200':
-          description: Account unlocked successfully
+        '202':
+          description: Verification link sent by email to unlock the account
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageBody'
               example:
-                message: Account has been unlocked
+                message: A verification link has been sent to your email to unlock your account
         '401':
           description: Missing or invalid authentication token
           content:
@@ -439,28 +439,18 @@ paths:
                 message: Missing or invalid authentication token
                 timestamp: 2026-07-20T15:00:00Z
         '403':
-          description: Insufficient privileges or account not locked
+          description: Insufficient privileges to unlock the requested account
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
-              examples:
-                accountNotLocked:
-                  summary: Account is not in locked state
-                  value:
-                    status: 403
-                    error: Forbidden
-                    message: Account is not locked
-                    timestamp: 2026-07-20T15:00:00Z
-                insufficientPrivileges:
-                  summary: Caller lacks ADMIN role and is not the account owner
-                  value:
-                    status: 403
-                    error: Forbidden
-                    message: Insufficient privileges to unlock this account
-                    timestamp: 2026-07-20T15:00:00Z
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to unlock this account
+                timestamp: 2026-07-20T15:00:00Z
         '404':
-          description: User not found
+          description: Locked account not found for the provided email
           content:
             application/json:
               schema:
@@ -468,7 +458,7 @@ paths:
               example:
                 status: 404
                 error: Not Found
-                message: User not found
+                message: No locked account found for this email
                 timestamp: 2026-07-20T15:00:00Z
 
   # ──────────────── GeoIP ────────────────
@@ -1355,14 +1345,15 @@ components:
     # ── Unlock account input ──
     UnlockAccountInput:
       type: object
-      required: [userId]
+      required: [email]
       properties:
-        userId:
+        email:
           type: string
-          format: uuid
-          description: ID of the locked account to unlock
+          format: email
+          maxLength: 100
+          description: Email of the locked account to unlock
       example:
-        userId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        email: lockeduser@example.com
 
     # ── Simple message body ──
     MessageBody:
