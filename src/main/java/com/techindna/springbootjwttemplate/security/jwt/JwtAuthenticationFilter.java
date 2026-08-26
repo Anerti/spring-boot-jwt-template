@@ -39,6 +39,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Claims claims = tokenProvider.validateToken(token);
                 String userId = claims.getSubject();
                 String role = claims.get("role", String.class);
+                String ipAddress = claims.get("ip_address", String.class);
 
                 List<SimpleGrantedAuthority> authorities =
                         role != null && !role.isBlank()
@@ -47,6 +48,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userId, null, authorities);
+                authentication.setDetails(ipAddress != null ? ipAddress : "");
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (JwtException ignored) {}

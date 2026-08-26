@@ -37,8 +37,9 @@ public class AuthController {
     }
 
     @GetMapping("/verification/{token}")
-    public ResponseEntity<VerifyRegistrationResponse> verify(@PathVariable UUID token) {
-        return ResponseEntity.status(HttpStatus.OK).body(authService.verify(token));
+    public ResponseEntity<VerifyRegistrationResponse> verify(
+            @PathVariable UUID token, HttpServletRequest servletRequest) {
+        return ResponseEntity.status(HttpStatus.OK).body(authService.verify(token, servletRequest));
     }
 
     @PostMapping("/resend-link")

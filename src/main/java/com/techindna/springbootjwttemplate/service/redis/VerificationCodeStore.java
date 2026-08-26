@@ -1,4 +1,4 @@
-package com.techindna.springbootjwttemplate.service;
+package com.techindna.springbootjwttemplate.service.redis;
 
 import java.time.Duration;
 import java.util.Optional;

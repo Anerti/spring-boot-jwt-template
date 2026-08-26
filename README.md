@@ -1,6 +1,6 @@
 # Spring Boot JWT Template
 
-A production-ready Spring Boot starter template with JWT authentication, email verification, Redis-based verification code storage, PostgreSQL persistence, and MaxMind GeoIP geolocation.
+A production-ready Spring Boot starter template with JWT authentication, email-based two-phase verification, Redis-backed verification code storage and failed-login tracking, PostgreSQL persistence, host/IP binding, and MaxMind GeoIP geolocation.
 
 ## Table of Contents
 
@@ -15,6 +15,13 @@ A production-ready Spring Boot starter template with JWT authentication, email v
   - [Redis](#redis)
   - [Email](#email)
   - [GeoIP](#geoip)
+- [Security Model](#security-model)
+  - [Authentication (stateless JWT)](#authentication-stateless-jwt)
+  - [Authorization (SecurityFilterChain)](#authorization-securityfilterchain)
+  - [Fine-grained access control](#fine-grained-access-control)
+  - [Failed login tracking & account lockout](#failed-login-tracking--account-lockout)
+  - [Host tracking & IP binding](#host-tracking--ip-binding)
+- [Verification Flow](#verification-flow)
 - [Getting Started](#getting-started)
   - [1. Clone and Configure](#1-clone-and-configure)
   - [2. Build](#2-build)
@@ -23,12 +30,12 @@ A production-ready Spring Boot starter template with JWT authentication, email v
 - [API Endpoints](#api-endpoints)
   - [Health](#health)
   - [Authentication](#authentication)
+  - [Hosts](#hosts)
   - [GeoIP](#geoip)
   - [Users](#users)
 - [Architecture](#architecture)
   - [Project Structure](#project-structure)
-  - [Security Architecture](#security-architecture)
-  - [Verification Flow](#verification-flow)
+  - [Domain Entities](#domain-entities)
   - [Conventions](#conventions)
 
 ---
@@ -44,7 +51,7 @@ Java 26 · Spring Boot 4.1.0 · Spring Data JPA · Spring Security · Spring Web
 | Java | 26 | System default is JDK 26 — always use the toolchain |
 | Gradle | 9.5.1+ | Bundled via `./gradlew` |
 | PostgreSQL | 14+ | Local or Neon/Supabase; schema `jwt_template_app` |
-| Redis | 7+ | Used for verification code storage (15 min TTL); Upstash or self-hosted |
+| Redis | 7+ | Used for verification codes (15 min TTL) and failed-login counters (12 h TTL); Upstash or self-hosted |
 | MaxMind GeoLite2-City | — | MMDB file in `src/main/resources/geoip/` or NFS-mounted |
 
 ## Configuration
@@ -53,7 +60,7 @@ Java 26 · Spring Boot 4.1.0 · Spring Data JPA · Spring Security · Spring Web
 
 All sensitive configuration lives in `.env` at the project root. This file is **gitignored** and must never be committed.
 
-Spring loads `.env` via `spring.config.import=optional:file:.env[.properties]`, which parses it as a standard Java properties file (key=value, one per line — not shell `export VAR=value`).
+Spring loads `.env` via `spring.config.import=optional:file:.env[.properties]`, which parses it as a standard Java properties file (key=value, one per line — not shell `export Var=value`).
 
 Create a `.env` file with the following variables:
 
@@ -80,7 +87,7 @@ spring.data.redis.url=
 # geoip.database-path=file:/mnt/geoip/GeoLite2-City.mmdb
 ```
 
-> **How it works:** Spring reads `.env` via `spring.config.import=optional:file:.env[.properties]`. Variable names match Spring property keys directly — no `${...}` placeholders needed in `application.properties`. The file is a standard Java properties file (`key=value`, `#` comments — not shell `export VAR=value`).
+> **How it works:** Spring reads `.env` via `spring.config.import=optional:file:.env[.properties]`. Variable names match Spring property keys directly — no `${...}` placeholders needed in `application.properties`. The file is a standard Java properties file (`key=value`, `#` comments — not shell `export Var=value`).
 
 #### JWT secret requirements
 
@@ -141,19 +148,36 @@ To update the database: download a new `GeoLite2-City.mmdb` from [MaxMind](https
 
 ### Database
 
-Schema is managed via native PostgreSQL DDL in `src/main/resources/db/migration/V1__init.sql`. The schema is applied manually — not via Flyway or any migration tool.
+Schema is managed via native PostgreSQL DDL in `src/main/resources/db/migration/`. The schema is applied manually — not via Flyway or any migration tool. Three migration files exist:
 
-The DDL creates:
+| File | What it creates |
+|------|-----------------|
+| `V1__init.sql` | Enum `user_role` (ADMIN, CUSTOMER), enum `user_status` (ACTIVE, INACTIVE, LOCKED), table `"user"` |
+| `V2__host.sql` | Enum `host_status` (ACTIVE, INACTIVE, BANNED), table `host` |
+| `V3__event_log.sql` | Table `event_log` |
+
+The DDL in `V1__init.sql` creates:
 - **Enum** `jwt_template_app.user_role`: `ADMIN`, `CUSTOMER`
-- **Table** `jwt_template_app."user"`: `id` (UUID PK), `username`, `password`, `first_name`, `last_name`, `email`, `verified`, `role`, `created_at`, `updated_at`
+- **Enum** `jwt_template_app.user_status`: `ACTIVE`, `INACTIVE`, `LOCKED`
+- **Table** `jwt_template_app."user"`: `id` (UUID PK), `username`, `password`, `first_name`, `last_name`, `email`, `verified`, `role`, `status`, `created_at`, `updated_at`
 
 Password hashing uses **Argon2id** via Spring Security's `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`.
 
 ### Redis
 
-Redis stores verification tokens with a 15-minute TTL. Each token is a UUID mapped to an email address under the key prefix `verification:`. Implemented in `VerificationCodeStore` using `StringRedisTemplate`.
+Redis serves two purposes:
 
-Compatible with Upstash (serverless Redis) and any RESP-compatible self-hosted Redis instance. Configure via `spring.data.redis.url` in `.env`.
+**Verification code storage** (`VerificationCodeStore`):
+- Stores verification tokens with a 15-minute TTL
+- Key pattern: `verification:{token}` → email address
+- Implemented using `StringRedisTemplate`
+- Compatible with Upstash (serverless) and any RESP-compatible self-hosted Redis instance
+
+**Failed-login tracking** (`FailedLoginTracker`):
+- Counts failed login attempts per user ID
+- Key pattern: `failed_logins:{userId}`, TTL 12 hours
+- After 5 failed attempts the account is locked (`UserStatus.LOCKED`)
+- Configure via `spring.data.redis.url` in `.env`
 
 ### Email
 
@@ -166,11 +190,89 @@ Templates are Thymeleaf HTML files in `src/main/resources/templates/mail/`:
 - `verification.html` — registration verification email
 - `login-verification.html` — login verification email
 
+Email variables injected into templates include: `verificationUrl`, `firstName`, `lastName`, `username`, `email`, `clientIp`, `userAgent`, `time`, `city`, `country`, `countryCode`, `timezone`, `latitude`, `longitude`.
+
+`MailSendException` caught by `GlobalExceptionHandler` — returns generic message, logs detail.
+
 ### GeoIP
 
 MaxMind GeoIP2 (version 4.2.1) provides IP-to-location resolution. The `DatabaseReader` is a Spring bean in `GeoIpConfig`, instantiated from the MMDB file specified by `geoip.database-path`.
 
 Client IP extraction: when `geoip.trust-x-forwarded-for=true`, the first IP in the `X-Forwarded-For` header is used; otherwise `HttpServletRequest.getRemoteAddr()` is used.
+
+## Security Model
+
+### Authentication (stateless JWT)
+
+1. `JwtTokenProvider` creates tokens with subject (userId), role, and `ip_address` claims, signed with HMAC-SHA using a BASE64-decoded secret (`app.jwt.secret`). Token expiration is configurable via `app.jwt.expiration-ms` (default: 24 hours).
+
+2. `JwtAuthenticationFilter` (a `OncePerRequestFilter`) intercepts every request before `UsernamePasswordAuthenticationFilter`. It extracts the Bearer token from the `Authorization` header, validates it, and sets the `SecurityContext` with a `UsernamePasswordAuthenticationToken` containing the userId, `ROLE_ADMIN`/`ROLE_CUSTOMER` authority, and the IP address as authentication details.
+
+3. No `UserDetailsService` is used — authentication is purely claim-based. Invalid/expired tokens are silently ignored (the filter chain continues without authentication).
+
+### Authorization (SecurityFilterChain)
+
+- `/auth/**`, `/syn`, `/geoip/**` → `permitAll()`
+- `/users/**`, `/hosts/**` → `authenticated()`
+- Unauthenticated requests to protected endpoints → 401 `Authentication required.`
+- Authenticated but unauthorized → 403 `Insufficient privileges.`
+
+### Fine-grained access control (`ResourcesAccessRules`)
+
+Injected into services, called before operations. Rules:
+- **Self-access**: any authenticated user can access their own resource (requesterId == targetId)
+- **ADMIN → CUSTOMER**: admin can access customer resources
+- **ADMIN → ADMIN**: denied (admins cannot access other admins' resources)
+- **CUSTOMER → anything else**: denied
+- **IP binding**: when the JWT carries an `ip_address` claim, the current request IP (`X-Forwarded-For` or `getRemoteAddr()`) must match. Mismatch → 403 `Session IP does not match current request`
+
+### Failed login tracking & account lockout
+
+`FailedLoginTracker` (Redis-backed) counts failed login attempts per user ID:
+- Key pattern: `failed_logins:{userId}`, TTL 12 hours
+- After **5 failed attempts** the account status is set to `LOCKED` (`UserStatus.LOCKED`)
+- Locked accounts cannot log in → 403 `Account locked`
+- A TODO remains to send a notification email when an account is locked (see `AuthService.java:127`)
+
+### Host tracking & IP binding
+
+`Host` records track IP addresses seen during authentication:
+- Table `host`: `id` (UUID PK), `user_id` (FK → user), `ip_address` (unique), `user_agent`, `status` (ACTIVE/INACTIVE/BANNED), `created_at`, `updated_at`
+- On each login/verification attempt, the host is looked up by IP + user ID, created if missing, and saved
+- If host status is `BANNED` → 403 `Host {ip} is banned from accessing this account`
+- Every authentication event is logged to `event_log` (description + timestamp)
+- Host status is marked as "unreliable" in `AuthService` — the status field is not trusted for access decisions; only the `BANNED` check is enforced
+
+## Verification Flow
+
+Two-phase verification is required before an account becomes active:
+
+**Registration flow:**
+1. `POST /auth/register` → validates input, saves user with `verified=false`, generates UUID token, stores in Redis (15 min TTL), sends verification email with link
+2. User clicks link → `GET /auth/verification/{token}` → validates token, checks host not banned, sets `verified=true`, returns JWT token + user
+
+**Login flow:**
+1. `POST /auth/login` → validates credentials (username or email + password), checks host not banned, checks `verified=true`, checks account not locked, generates UUID token, stores in Redis (15 min TTL), sends verification email with link
+2. User clicks link → `GET /auth/verification/{token}` → validates token, checks host not banned, returns JWT token + user (does not re-set verified since already true)
+
+**Resend flow:**
+1. `POST /auth/resend-link?email=...` → validates email, finds unverified user, generates new UUID token, stores in Redis (15 min TTL), sends verification email
+
+**Unlock flow (account locked):**
+1. `POST /auth/unlock` (JWT-authenticated) → accepts email of locked account, checks caller has privileges, generates UUID token, stores in Redis (15 min TTL), sends unlock email
+2. User clicks link → `GET /auth/verification/{token}` → validates token, unlocks account, returns JWT token
+
+**Change password flow:**
+1. `POST /auth/change-password` (JWT-authenticated) → validates current credentials + new password, generates UUID token, stores in Redis (15 min TTL), sends confirmation email
+2. User clicks link → `GET /auth/verification/{token}` → validates token, updates password, returns JWT token
+
+**Change email flow:**
+1. `POST /auth/change-email` (JWT-authenticated) → validates current credentials + new email, generates UUID token, stores in Redis (15 min TTL), sends confirmation email to new address
+2. User clicks link → `GET /auth/verification/{token}` → validates token, updates email, returns JWT token
+
+Redis key pattern: `verification:{token}` → email address, TTL 15 minutes.
+
+> **Note:** `POST /auth/change-password`, `POST /auth/change-email`, and `POST /auth/unlock` are defined in the OpenAPI spec (`docs/api/api.yaml`) but their DTOs and controller methods are not yet implemented. The verification endpoint (`GET /auth/verification/{token}`) handles all token-consuming flows generically.
 
 ## Getting Started
 
@@ -221,9 +323,20 @@ Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/auth/register` | — | Register → 202, sends verification code by email |
-| GET | `/auth/verification/{token}` | — | Verify token → 200 with JWT token |
+| GET | `/auth/verification/{token}` | — | Verify token → 200 with JWT token + user. Consumes tokens from register, login, resend, change-password, change-email, and unlock flows |
 | POST | `/auth/login` | — | Login → 202, sends verification code by email |
 | POST | `/auth/resend-link?email=...` | — | Resend verification code → 202 |
+| POST | `/auth/change-password` | JWT | Request password change → 202, sends confirmation link by email *(spec'd, not yet implemented)* |
+| POST | `/auth/change-email` | JWT | Request email change → 202, sends confirmation link by email *(spec'd, not yet implemented)* |
+| POST | `/auth/unlock` | JWT | Request to unlock a locked account → 202, sends unlock link by email *(spec'd, not yet implemented)* |
+
+### Hosts
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/hosts` | JWT | List hosts (paginated). Non-admin callers see only their own hosts. Filter by userId, ipAddress, userAgent, loginFailed |
+| GET | `/hosts/{hostId}` | JWT | Get a host by ID (includes GeoIP data for its IP). Non-admin callers can only access their own hosts |
+| PATCH | `/hosts/{hostId}` | JWT | Ban a host → sets status to BANNED. Only status transition exposed via API |
 
 ### GeoIP
 
@@ -236,9 +349,9 @@ Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/users` | JWT | List users (paginated, admin only) |
+| GET | `/users` | JWT | List users (paginated, admin only). Filter by username, firstName, lastName, email |
 | GET | `/users/{userId}` | JWT | Get user by ID |
-| PATCH | `/users/{userId}` | JWT | Update user |
+| PATCH | `/users/{userId}` | JWT | Update user (username, firstName, lastName) |
 | DELETE | `/users/{userId}` | JWT | Delete user |
 
 ## Architecture
@@ -246,24 +359,26 @@ Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
 ### Project Structure
 
 ```
-src/main/java/com/techindna/springbootjwttemplate/
+com.techindna.springbootjwttemplate
 ├── SpringBootJwtTemplateApplication.java   # entry point
 ├── config/
-│   ├── AsyncConfig.java                    # @EnableAsync + mailExecutor ThreadPoolTaskExecutor
-│   └── GeoIpConfig.java                   # DatabaseReader bean (MaxMind)
+│   ├── AsyncConfig.java                    # @EnableAsync + mailExecutor ThreadPoolTaskExecutor (core:5, max:20, queue:100)
+│   └── GeoIpConfig.java                    # DatabaseReader bean (MaxMind), reads from classpath or file:
+│                                           #   - classpath:geoip/GeoLite2-City.mmdb (bundled)
+│                                           #   - file:/mnt/geoip/GeoLite2-City.mmdb (NFS-mounted)
 ├── security/
 │   ├── SecurityConfig.java                 # SecurityFilterChain, PasswordEncoder (Argon2id)
-│   ├── ResourcesAccessRules.java           # authorization: self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied
+│   ├── ResourcesAccessRules.java           # authorization: self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding
 │   └── jwt/
-│       ├── JwtAuthenticationFilter.java    # JWT filter (extracts userId + role from claims)
-│       └── JwtTokenProvider.java           # JWT create/parse (HMAC-SHA, BASE64 secret)
+│       ├── JwtAuthenticationFilter.java    # JWT filter (extracts userId + role + ip from claims, no UserDetailsService)
+│       └── JwtTokenProvider.java           # JWT create/parse (HMAC-SHA, BASE64 secret, configurable TTL)
 ├── controller/
-│   ├── AuthController.java                 # POST /auth/register, POST /auth/login, GET /auth/verification, POST /auth/resend-link
+│   ├── AuthController.java                 # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link
 │   ├── GeoIpController.java                # GET /geoip, GET /geoip/{ip}
 │   ├── SynController.java                  # GET /syn
 │   └── UserController.java                 # GET/PATCH/DELETE /users/{userId}
 ├── dto/
-│   ├── LoginInput.java                     # login request body
+│   ├── LoginInput.java                     # login request body (username, email, password)
 │   ├── MessageBody.java                    # { message } response
 │   ├── RegisterInput.java                  # register request body
 │   ├── UpdateUserInput.java                # user update request body
@@ -271,8 +386,14 @@ src/main/java/com/techindna/springbootjwttemplate/
 ├── entity/
 │   ├── GeoIpResponse.java                  # GeoIP lookup result record
 │   ├── User.java                           # domain record (read model)
+│   ├── Host.java                           # host domain record (read model)
+│   ├── EventLog.java                       # event log domain record (read model)
 │   ├── email/EmailDetails.java             # email details entity
-│   └── enums/UserRole.java                 # user role enum (ADMIN, CUSTOMER)
+│   ├── enums/
+│   │   ├── UserRole.java                   # user role enum (ADMIN, CUSTOMER)
+│   │   ├── UserStatus.java                 # account status enum (ACTIVE, INACTIVE, LOCKED)
+│   │   └── HostStatus.java                 # host status enum (ACTIVE, INACTIVE, BANNED)
+│   └── enums/                              # enum packages
 ├── exception/
 │   ├── ErrorBody.java                      # error response DTO (status, error, message, timestamp)
 │   ├── GlobalExceptionHandler.java         # centralized error handling (@RestControllerAdvice)
@@ -290,24 +411,33 @@ src/main/java/com/techindna/springbootjwttemplate/
 ├── repository/
 │   ├── AuthRepository.java                 # JPA repository (findByEmail, findByUsername)
 │   ├── UserRepository.java                 # JPA repository (CRUD)
+│   ├── HostRepository.java                 # JPA repository (findByIpAddress, findByIpAddressAndUser_Id)
+│   ├── LogRepository.java                  # JPA repository (event log CRUD)
 │   └── model/
-│       └── JUser.java                      # JPA entity (PostgreSQL "user" table)
+│       ├── JUser.java                      # JPA entity (PostgreSQL "user" table)
+│       ├── JHost.java                      # JPA entity (PostgreSQL "host" table)
+│       └── JEventLog.java                  # JPA entity (PostgreSQL "event_log" table)
 ├── service/
-│   ├── AuthService.java                    # register + login + verification + resend
+│   ├── AuthService.java                    # register + login + verification + resend + host/event logging
 │   ├── UserService.java                    # getUser + updateUser (with ResourcesAccessRules)
 │   ├── GeoIpService.java                   # IP lookup, client IP extraction
-│   ├── VerificationCodeStore.java          # Redis-based verification code storage (15 min TTL)
+│   ├── VerificationCodeStore.java          # Redis-based verification code storage (15 min TTL, key prefix "verification:")
+│   ├── FailedLoginTracker.java             # Redis-based failed login counter (12 h TTL, key prefix "failed_logins:")
 │   └── mail/
 │       ├── EmailService.java               # email service interface
-│       └── EmailSenderService.java         # email service implementation (Thymeleaf + async)
+│       └── EmailSenderService.java         # email service implementation (Thymeleaf + @Async("mailExecutor"))
 └── validator/
     ├── DataValidator.java                  # low-level format checks (email, name, username, password, IP)
     └── UserValidator.java                  # registration + login + update rules
+```
 
+```
 src/main/resources/
 ├── application.properties
 ├── db/migration/
-│   └── V1__init.sql                        # native DDL: enum + user table
+│   ├── V1__init.sql                        # native DDL: user_role enum, user_status enum, "user" table
+│   ├── V2__host.sql                        # host_status enum, "host" table
+│   └── V3__event_log.sql                  # "event_log" table
 ├── geoip/
 │   └── GeoLite2-City.mmdb                  # MaxMind GeoIP database
 └── templates/
@@ -316,65 +446,35 @@ src/main/resources/
         └── login-verification.html         # login email template
 ```
 
-### Security Architecture
+### Domain Entities
 
-**Authentication (stateless JWT):**
+| Table | Purpose | Key columns |
+|-------|---------|-------------|
+| `users` | User accounts with JWT auth | `id` (UUID PK), `username`, `email`, `password`, `role`, `status`, `verified` |
+| `host` | IP address tracking per user | `id` (UUID PK), `user_id` (FK), `ip_address` (unique), `user_agent`, `status` |
+| `event_log` | Authentication event audit trail | `id` (UUID PK), `host_id` (FK), `description`, `created_at` |
 
-1. `JwtTokenProvider` creates tokens with subject (userId) and role claims, signed with HMAC-SHA using a BASE64-decoded secret (`app.jwt.secret`). Token expiration is configurable via `app.jwt.expiration-ms` (default: 24 hours).
+**Enums:**
+- `user_role`: `ADMIN`, `CUSTOMER`
+- `user_status`: `ACTIVE`, `INACTIVE`, `LOCKED`
+- `host_status`: `ACTIVE`, `INACTIVE`, `BANNED`
 
-2. `JwtAuthenticationFilter` (a `OncePerRequestFilter`) intercepts every request before `UsernamePasswordAuthenticationFilter`. It extracts the Bearer token from the `Authorization` header, validates it, and sets the `SecurityContext` with a `UsernamePasswordAuthenticationToken` containing the userId and `ROLE_ADMIN`/`ROLE_CUSTOMER` authority.
-
-3. No `UserDetailsService` is used — authentication is purely claim-based. Invalid/expired tokens are silently ignored (the filter chain continues without authentication).
-
-**Authorization (SecurityFilterChain):**
-
-- `/auth/**`, `/syn`, `/geoip/**` → `permitAll()`
-- `/users/**` → `authenticated()`
-- Unauthenticated requests to protected endpoints → 401 `Authentication required.`
-- Authenticated but unauthorized → 403 `Insufficient privileges.`
-
-**Fine-grained access control (`ResourcesAccessRules`):**
-
-Injected into `UserService`, called before operations. Rules:
-- **Self-access**: any authenticated user can access their own resource (requesterId == targetId)
-- **ADMIN → CUSTOMER**: admin can access customer resources
-- **ADMIN → ADMIN**: denied (admins cannot access other admins' resources)
-- **CUSTOMER → anything else**: denied
-
-**Password hashing:** Argon2id via `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`.
-
-### Verification Flow
-
-Two-phase verification is required before an account becomes active:
-
-**Registration flow:**
-1. `POST /auth/register` → validates input, saves user with `verified=false`, generates UUID token, stores in Redis (15 min TTL), sends verification email with link
-2. User clicks link → `GET /auth/verification/{token}` → validates token, sets `verified=true`, returns JWT token
-
-**Login flow:**
-1. `POST /auth/login` → validates credentials, checks `verified=true`, generates UUID token, stores in Redis (15 min TTL), sends verification email with link
-2. User clicks link → `GET /auth/verification/{token}` → validates token, returns JWT token (does not re-set verified since already true)
-
-**Resend flow:**
-1. `POST /auth/resend-link?email=...` → validates email, finds unverified user, generates new UUID token, stores in Redis (15 min TTL), sends verification email
-
-Redis key pattern: `verification:{token}` → email address, TTL 15 minutes.
+**Schema**: native PostgreSQL DDL (`V1__init.sql`, `V2__host.sql`, `V3__event_log.sql`), schema `jwt_template_app` (set via `.env`). Applied manually, not via Flyway. Password hashing: Argon2id (`Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`).
 
 ### Conventions
 
 - **IDs**: all UUIDs (`gen_random_uuid()`, `java.util.UUID`)
 - **Package**: `com.techindna.springbootjwttemplate`
-- **Layer naming**: J-prefix for JPA entities (`JUser`), domain records in `entity/`, Lombok `@Getter @Setter @NoArgsConstructor`
+- **Layer naming**: J-prefix for JPA entities (`JUser`, `JHost`, `JEventLog`), domain records in `entity/`, Lombok `@Getter @Setter @NoArgsConstructor`
 - **Validation**: `DataValidator` pattern (void return, throws `UnprocessableContentException` (422)), not `@Valid`
 - **Error handling**: custom exceptions → `GlobalExceptionHandler` → JSON `ErrorBody` (status, error, message, timestamp)
 - **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
-- **JWT auth**: claim-based — extract `userId` + `role` from token, no `UserDetailsService`
+- **JWT auth**: claim-based — extract `userId` + `role` + `ip_address` from token, no `UserDetailsService`
 - **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
-- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied
+- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
 - **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`, `/geoip`)
 - **GeoIP**: MaxMind MMDB — either `classpath:geoip/GeoLite2-City.mmdb` (bundled in `src/main/resources/geoip/`) or `file:/mnt/geoip/GeoLite2-City.mmdb` (NFS-mounted from a VPS). Configured via `geoip.database-path` in `.env`/`application.properties`. Update the file manually — re-download from MaxMind and replace it (and for NFS, re-export on the VPS).
 - **Docs language**: English for API descriptions, French for user-facing instructions
 - **Commits**: one commit per logical change, conventional format
 - **Code style**: English-only, no comments/docstrings, short focused functions, explicit constructors over `@AllArgsConstructor`
-

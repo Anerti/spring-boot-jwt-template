@@ -1,11 +1,13 @@
 package com.techindna.springbootjwttemplate.repository.model;
 
 import com.techindna.springbootjwttemplate.entity.enums.UserRole;
+import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -52,6 +54,11 @@ public class JUser {
     @Builder.Default
     private UserRole role = UserRole.CUSTOMER;
 
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false)
+    @Builder.Default
+    private UserStatus status = UserStatus.ACTIVE;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -59,4 +66,7 @@ public class JUser {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<JHost> hosts;
 }

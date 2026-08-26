@@ -16,9 +16,9 @@ com.techindna.springbootjwttemplate
 │                                         #   - file:/mnt/geoip/GeoLite2-City.mmdb (NFS-mounted)
 ├── security/
 │   ├── SecurityConfig.java               # SecurityFilterChain, PasswordEncoder (Argon2id)
-│   ├── ResourcesAccessRules.java         # authorization: self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied
+│   ├── ResourcesAccessRules.java         # authorization: self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding
 │   └── jwt/
-│       ├── JwtAuthenticationFilter.java   # JWT filter (extracts userId + role from claims, no UserDetailsService)
+│       ├── JwtAuthenticationFilter.java   # JWT filter (extracts userId + role + ip from claims, no UserDetailsService)
 │       └── JwtTokenProvider.java          # JWT create/parse (HMAC-SHA, BASE64 secret, configurable TTL)
 ├── controller/
 │   ├── AuthController.java               # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link
@@ -26,7 +26,7 @@ com.techindna.springbootjwttemplate
 │   ├── SynController.java                # GET /syn
 │   └── UserController.java               # GET/PATCH/DELETE /users/{userId}
 ├── dto/
-│   ├── LoginInput.java                   # login request body
+│   ├── LoginInput.java                   # login request body (username, email, password)
 │   ├── MessageBody.java                  # { message } response
 │   ├── RegisterInput.java                # register request body
 │   ├── UpdateUserInput.java              # user update request body
@@ -34,8 +34,13 @@ com.techindna.springbootjwttemplate
 ├── entity/
 │   ├── GeoIpResponse.java               # GeoIP lookup result record
 │   ├── User.java                         # domain record (read model)
+│   ├── Host.java                         # host domain record (read model)
+│   ├── EventLog.java                     # event log domain record (read model)
 │   ├── email/EmailDetails.java           # email details entity
-│   └── enums/UserRole.java               # user role enum (ADMIN, CUSTOMER)
+│   └── enums/
+│       ├── UserRole.java                 # user role enum (ADMIN, CUSTOMER)
+│       ├── UserStatus.java               # account status enum (ACTIVE, INACTIVE, LOCKED)
+│       └── HostStatus.java               # host status enum (ACTIVE, INACTIVE, BANNED)
 ├── exception/
 │   ├── ErrorBody.java                    # error response DTO (status, error, message, timestamp)
 │   ├── GlobalExceptionHandler.java       # centralized error handling (@RestControllerAdvice)
@@ -53,13 +58,18 @@ com.techindna.springbootjwttemplate
 ├── repository/
 │   ├── AuthRepository.java               # JPA repository (findByEmail, findByUsername)
 │   ├── UserRepository.java               # JPA repository (CRUD)
+│   ├── HostRepository.java               # JPA repository (findByIpAddress, findByIpAddressAndUser_Id)
+│   ├── LogRepository.java                # JPA repository (event log CRUD)
 │   └── model/
-│       └── JUser.java                    # JPA entity (PostgreSQL "user" table)
+│       ├── JUser.java                    # JPA entity (PostgreSQL "user" table)
+│       ├── JHost.java                    # JPA entity (PostgreSQL "host" table)
+│       └── JEventLog.java                # JPA entity (PostgreSQL "event_log" table)
 ├── service/
-│   ├── AuthService.java                  # register + login + verification + resend
+│   ├── AuthService.java                  # register + login + verification + resend + host/event logging + failed login tracking
 │   ├── UserService.java                  # getUser + updateUser (with ResourcesAccessRules)
 │   ├── GeoIpService.java                # IP lookup, client IP extraction
 │   ├── VerificationCodeStore.java        # Redis-based verification code storage (15 min TTL, key prefix "verification:")
+│   ├── FailedLoginTracker.java           # Redis-based failed login counter (12 h TTL, key prefix "failed_logins:")
 │   └── mail/
 │       ├── EmailService.java             # email service interface
 │       └── EmailSenderService.java       # email service implementation (Thymeleaf + @Async("mailExecutor"))
@@ -74,7 +84,9 @@ docs/
 src/main/resources/
 ├── application.properties
 ├── db/migration/
-│   └── V1__init.sql           # native DDL: enum + user table
+│   ├── V1__init.sql           # native DDL: user_role enum, user_status enum, "user" table
+│   ├── V2__host.sql           # host_status enum, "host" table
+│   └── V3__event_log.sql     # "event_log" table
 ├── geoip/
 │   └── GeoLite2-City.mmdb     # MaxMind GeoIP database
 └── templates/
@@ -87,40 +99,54 @@ src/main/resources/
 
 | Table    | Purpose                                   | Key columns                                                     |
 |----------|-------------------------------------------|-----------------------------------------------------------------|
-| `users`  | User accounts with JWT auth               | `id` (UUID PK), `username`, `email`, `password`, `role`, `verified` |
+| `users`  | User accounts with JWT auth               | `id` (UUID PK), `username`, `email`, `password`, `role`, `status`, `verified` |
+| `host`   | IP address tracking per user              | `id` (UUID PK), `user_id` (FK), `ip_address` (unique), `user_agent`, `status` |
+| `event_log` | Authentication event audit trail       | `id` (UUID PK), `host_id` (FK), `description`, `created_at`    |
 
-**Enum** `user_role`: `ADMIN`, `CUSTOMER`
+**Enums:**
+- `user_role`: `ADMIN`, `CUSTOMER`
+- `user_status`: `ACTIVE`, `INACTIVE`, `LOCKED`
+- `host_status`: `ACTIVE`, `INACTIVE`, `BANNED`
 
-**Schema**: native PostgreSQL DDL (`V1__init.sql`), schema `jwt_template_app` (set via `.env`). Applied manually, not via Flyway. Password hashing: Argon2id (`Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`).
+**Schema**: native PostgreSQL DDL (`V1__init.sql`, `V2__host.sql`, `V3__event_log.sql`), schema `jwt_template_app` (set via `.env`). Applied manually, not via Flyway. Password hashing: Argon2id (`Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`).
 
 ## OpenAPI spec endpoints
 
-| Method | Path                | Auth | Description                                      |
-|--------|---------------------|------|--------------------------------------------------|
-| GET    | /syn                | —    | Health check → 200 `syn-ack`                     |
-| POST   | /auth/register      | —    | Register → 202, sends verification code by email |
-| GET    | /auth/verification/{token} | —    | Verify token → 200 with JWT token                 |
-| POST   | /auth/login         | —    | Login → 202, sends verification code by email    |
-| POST   | /auth/resend-link   | —    | Resend verification code → 202                    |
-| GET    | /geoip              | —    | Resolve client geolocation (X-Forwarded-For)      |
-| GET    | /geoip/{ip}         | —    | Resolve IP geolocation (IPv4/IPv6)                |
-| GET    | /users              | JWT  | List users (paginated, admin only)               |
-| GET    | /users/{userId}     | JWT  | Get user by ID                                   |
-| PATCH  | /users/{userId}     | JWT  | Update user                                      |
-| DELETE | /users/{userId}     | JWT  | Delete user                                      |
+| Method | Path                           | Auth | Description                                                                                  |
+|--------|--------------------------------|------|----------------------------------------------------------------------------------------------|
+| GET    | /syn                           | —    | Health check → 200 `syn-ack`                                                                 |
+| POST   | /auth/register                 | —    | Register → 202, sends verification code by email                                             |
+| GET    | /auth/verification/{token}     | —    | Verify token → 200 with JWT token + user. Consumes tokens from all verification flows        |
+| POST   | /auth/login                    | —    | Login → 202, sends verification code by email                                                |
+| POST   | /auth/resend-link              | —    | Resend verification code → 202                                                              |
+| POST   | /auth/change-password          | JWT  | Request password change → 202 *(spec'd, not yet implemented)*                                |
+| POST   | /auth/change-email             | JWT  | Request email change → 202 *(spec'd, not yet implemented)*                                   |
+| POST   | /auth/unlock                   | JWT  | Request to unlock a locked account → 202 *(spec'd, not yet implemented)*                     |
+| GET    | /hosts                         | JWT  | List hosts (paginated). Non-admin see own hosts only *(spec'd, not yet implemented)*         |
+| GET    | /hosts/{hostId}                | JWT  | Get host by ID with GeoIP data *(spec'd, not yet implemented)*                              |
+| PATCH  | /hosts/{hostId}                | JWT  | Ban a host *(spec'd, not yet implemented)*                                                   |
+| GET    | /geoip                         | —    | Resolve client geolocation (X-Forwarded-For)                                                 |
+| GET    | /geoip/{ip}                    | —    | Resolve IP geolocation (IPv4/IPv6)                                                           |
+| GET    | /users                         | JWT  | List users (paginated, admin only)                                                          |
+| GET    | /users/{userId}                | JWT  | Get user by ID                                                                              |
+| PATCH  | /users/{userId}                | JWT  | Update user                                                                                 |
+| DELETE | /users/{userId}                | JWT  | Delete user                                                                                 |
 
 ## Infrastructure
 
 ### Database (PostgreSQL)
-- Native DDL in `src/main/resources/db/migration/V1__init.sql` — applied manually, not via Flyway
+- Native DDL in `src/main/resources/db/migration/` — applied manually, not via Flyway
+- Three migration files: `V1__init.sql` (user_role, user_status, user), `V2__host.sql` (host_status, host), `V3__event_log.sql` (event_log)
 - Schema: `jwt_template_app` (configured via `spring.jpa.properties.hibernate.default_schema` in `.env`)
-- DDL creates enum `user_role` (ADMIN, CUSTOMER) and table `"user"` with UUID PK
+- DDL creates enum `user_role` (ADMIN, CUSTOMER), enum `user_status` (ACTIVE, INACTIVE, LOCKED), enum `host_status` (ACTIVE, INACTIVE, BANNED)
+- Tables: `"user"` (UUID PK), `host` (UUID PK, FK to user, unique ip_address), `event_log` (UUID PK, FK to host)
 - Password encoding: Argon2id via Spring Security's `Argon2PasswordEncoder`
 
 ### Redis
-- Stores verification tokens with 15-minute TTL
-- Key pattern: `verification:{token}` → email address
-- Implemented in `VerificationCodeStore` using `StringRedisTemplate`
+- Two uses:
+  - **Verification code storage** (`VerificationCodeStore`): 15-minute TTL, key pattern `verification:{token}` → email address
+  - **Failed-login tracking** (`FailedLoginTracker`): 12-hour TTL, key pattern `failed_logins:{userId}` → count. After 5 failures account is locked
+- Implemented using `StringRedisTemplate`
 - Compatible with Upstash (serverless) and self-hosted RESP-compatible Redis
 - Configure via `spring.data.redis.url` in `.env`
 
@@ -128,6 +154,7 @@ src/main/resources/
 - Gmail SMTP (smtp.gmail.com:587, STARTTLS)
 - Async sending via `@Async("mailExecutor")` — dedicated `ThreadPoolTaskExecutor` (core:5, max:20, queue:100)
 - Thymeleaf HTML templates in `src/main/resources/templates/mail/`
+- Email variables: `verificationUrl`, `firstName`, `lastName`, `username`, `email`, `clientIp`, `userAgent`, `time`, `city`, `country`, `countryCode`, `timezone`, `latitude`, `longitude`
 - `MailSendException` caught by `GlobalExceptionHandler` — returns generic message, logs detail
 
 ### GeoIP
@@ -192,21 +219,64 @@ JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew spotlessApply
 
 > `JAVA_HOME` must point to JDK 26 — the system default is JDK 26.
 
+## Security model
+
+### Authentication (stateless JWT)
+1. `JwtTokenProvider` creates tokens with subject (userId), role, and `ip_address` claims, signed with HMAC-SHA using a BASE64-decoded secret (`app.jwt.secret`). Expiration configurable via `app.jwt.expiration-ms` (default: 24h).
+2. `JwtAuthenticationFilter` (OncePerRequestFilter) extracts Bearer token from `Authorization` header, validates it, sets `SecurityContext` with `UsernamePasswordAuthenticationToken` containing userId + `ROLE_ADMIN`/`ROLE_CUSTOMER` authority + IP as auth details.
+3. No `UserDetailsService` — purely claim-based. Invalid/expired tokens silently ignored.
+
+### Authorization (SecurityFilterChain)
+- `/auth/**`, `/syn`, `/geoip/**` → `permitAll()`
+- `/users/**`, `/hosts/**` → `authenticated()`
+- Unauthenticated → 401, unauthorized → 403
+
+### Fine-grained access control (`ResourcesAccessRules`)
+Injected into services, called before operations. Rules:
+- **Self-access**: requesterId == targetId
+- **ADMIN → CUSTOMER**: admin can access customer resources
+- **ADMIN → ADMIN**: denied
+- **CUSTOMER → anything else**: denied
+- **IP binding**: if JWT carries `ip_address` claim, current request IP must match. Mismatch → 403 `Session IP does not match current request`
+
+### Failed login tracking & account lockout
+`FailedLoginTracker` (Redis): counts failed attempts per userId, key `failed_logins:{userId}`, TTL 12h. After **5 failed attempts** the account status is set to `LOCKED` (`UserStatus.LOCKED`) and login is rejected with 403 `Account locked`. A TODO remains to send a notification email on lockout (see `AuthService.java:127`).
+
+### Host tracking & event logging
+On each authentication attempt, `AuthService.recordHostAndCheckBan()` looks up or creates a `Host` record (ip_address + user_agent + user_id), checks if host is `BANNED` (→ 403), saves it, and logs the event to `event_log`. Host status is marked as "unreliable" in the code; only the BANNED check is enforced.
+
+## Verification flow
+
+**Registration**: `POST /auth/register` → save user (verified=false) → generate UUID token → store in Redis (15 min TTL) → send verification email → user clicks link → `GET /auth/verification/{token}` → validate token → check host not banned → set verified=true → return JWT + user.
+
+**Login**: `POST /auth/login` → validate credentials (username or email + password) → check host not banned → check verified=true → check not locked → generate UUID token → store in Redis (15 min TTL) → send verification email → user clicks link → `GET /auth/verification/{token}` → validate token → check host not banned → return JWT + user.
+
+**Resend**: `POST /auth/resend-link?email=...` → validate email → find unverified user → generate new token → store in Redis → send email.
+
+**Unlock** (account locked): `POST /auth/unlock` (JWT) → accept email → check privileges → generate token → store in Redis → send unlock email → user clicks link → `GET /auth/verification/{token}` → validate → unlock account → return JWT.
+
+**Change password** (spec'd): `POST /auth/change-password` (JWT) → validate current credentials + new password → generate token → send confirmation email → click link → `GET /auth/verification/{token}` → update password → return JWT.
+
+**Change email** (spec'd): `POST /auth/change-email` (JWT) → validate current credentials + new email → generate token → send confirmation email to new address → click link → `GET /auth/verification/{token}` → update email → return JWT.
+
+All verification flows consume tokens via the same `GET /auth/verification/{token}` endpoint. Redis key pattern: `verification:{token}` → email address, TTL 15 minutes.
+
+> **Implementation note**: `POST /auth/change-password`, `POST /auth/change-email`, and `POST /auth/unlock` are defined in the OpenAPI spec (`docs/api/api.yaml`) but their DTOs and controller methods are not yet implemented. The verification endpoint handles all token-consuming flows generically.
+
 ## Conventions
 
 - **IDs**: all UUIDs (`gen_random_uuid()`, `java.util.UUID`)
 - **Package**: `com.techindna.springbootjwttemplate`
-- **Layer naming**: J-prefix for JPA entities (`JUser`), domain records in `entity/`, Lombok `@Getter @Setter @NoArgsConstructor`
+- **Layer naming**: J-prefix for JPA entities (`JUser`, `JHost`, `JEventLog`), domain records in `entity/`, Lombok `@Getter @Setter @NoArgsConstructor`
 - **Validation**: `DataValidator` pattern (void return, throws `UnprocessableContentException` (422)), not `@Valid`
 - **Error handling**: custom exceptions → `GlobalExceptionHandler` → JSON `ErrorBody` (status, error, message, timestamp)
 - **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
-- **JWT auth**: claim-based — extract `userId` + `role` from token, no `UserDetailsService`
+- **JWT auth**: claim-based — extract `userId` + `role` + `ip_address` from token, no `UserDetailsService`
 - **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
-- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. ADMIN→CUSTOMER; self-only
+- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
 - **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`, `/geoip`)
-- **GeoIP**: MaxMind MMDB — either `classpath:geoip/GeoLite2-City.mmdb` (bundled in `src/main/resources/geoip/`) or `file:/mnt/geoip/GeoLite2-City.mmdb` (NFS-mounted from a VPS). Configured via `geoip.database-path` in `.env`/`application.properties`. Update the file manually — re-download from MaxMind and replace it (and for NFS, re-export on the VPS).
+- **GeoIP**: MaxMind MMDB — either `classpath:geoip/GeoLite2-City.mmdb` (bundled) or `file:/mnt/geoip/GeoLite2-City.mmdb` (NFS-mounted). Update manually — re-download from MaxMind and replace.
 - **Docs language**: English for API descriptions, French for user-facing instructions
 - **Commits**: one commit per logical change, conventional format
 - **Code style**: English-only, no comments/docstrings, short focused functions, explicit constructors over `@AllArgsConstructor`
-

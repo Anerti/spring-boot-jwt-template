@@ -3,6 +3,7 @@ package com.techindna.springbootjwttemplate.controller;
 import com.techindna.springbootjwttemplate.dto.UpdateUserInput;
 import com.techindna.springbootjwttemplate.entity.User;
 import com.techindna.springbootjwttemplate.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,14 +23,15 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/{userId}")
-    public ResponseEntity<User> getUser(@PathVariable UUID userId) {
-        return ResponseEntity.status(HttpStatus.OK).body(userService.getUserById(userId));
+    public ResponseEntity<User> getUser(@PathVariable UUID userId, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.getUserById(userId, request));
     }
 
     @PatchMapping("/{userId}")
     public ResponseEntity<User> updateUser(
             @PathVariable UUID userId,
-            @RequestBody UpdateUserInput input) {
-        return ResponseEntity.status(HttpStatus.OK).body(userService.updateUser(userId, input));
+            @RequestBody UpdateUserInput input,
+            HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.updateUser(userId, input, request));
     }
 }
