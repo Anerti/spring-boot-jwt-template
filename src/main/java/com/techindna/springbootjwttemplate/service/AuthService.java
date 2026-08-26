@@ -72,8 +72,7 @@ public class AuthService {
         String email = request.getEmail().strip().toLowerCase();
 
         try {
-            authRepository.save(userMapper.toEntity(request, encodedPassword));
-            authRepository.flush();
+            authRepository.saveAndFlush(userMapper.toEntity(request, encodedPassword));
         } catch (DataIntegrityViolationException e) {
             String constraint = e.getMostSpecificCause().getMessage();
             if (constraint != null && constraint.contains("email")) {
@@ -161,6 +160,8 @@ public class AuthService {
             jUser.setVerified(true);
             authRepository.save(jUser);
         }
+
+        recordHostAndCheckBan(jUser.getId(), servletRequest, "Verification successful: Token accepted");
 
         verificationCodeStore.deleteByToken(tokenStr);
 
