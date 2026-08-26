@@ -166,9 +166,13 @@ public class AuthService {
         String tokenStr = token.toString();
         String email = verificationCodeStore.getEmailByToken(tokenStr).orElse(null);
 
+        if (email == null) {
+            throw new UnauthorizedException("Invalid or expired token");
+        }
+
         JUser jUser = authRepository.findByEmail(email).orElse(null);
 
-        if (jUser == null){
+        if (jUser == null) {
             throw new UnauthorizedException("Invalid or expired token");
         }
 
