@@ -10,7 +10,6 @@ public record Host(
     String ipAddress,
     String userAgent,
     HostStatus status,
-    Boolean loginFailed,
     String description,
     Instant createdAt,
     Instant updatedAt

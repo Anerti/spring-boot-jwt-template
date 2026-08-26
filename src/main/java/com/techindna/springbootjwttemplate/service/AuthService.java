@@ -164,17 +164,11 @@ public class AuthService {
     @Transactional
     public VerifyRegistrationResponse verify(UUID token, HttpServletRequest servletRequest) {
         String tokenStr = token.toString();
-        String email = verificationCodeStore.getEmailByToken(tokenStr).orElse(null);
+        String email = verificationCodeStore.getEmailByToken(tokenStr)
+                .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
 
-        if (email == null) {
-            throw new UnauthorizedException("Invalid or expired token");
-        }
-
-        JUser jUser = authRepository.findByEmail(email).orElse(null);
-
-        if (jUser == null) {
-            throw new UnauthorizedException("Invalid or expired token");
-        }
+        JUser jUser = authRepository.findByEmail(email)
+                .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
 
         JHost host = recordHostAndCheckBan(jUser, servletRequest);
 

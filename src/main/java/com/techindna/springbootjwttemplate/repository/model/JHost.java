@@ -44,10 +44,6 @@ public class JHost {
     @Builder.Default
     private HostStatus status = HostStatus.INACTIVE;
 
-    @Column(name = "login_failed", nullable = false)
-    @Builder.Default
-    private Boolean loginFailed = false;
-
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

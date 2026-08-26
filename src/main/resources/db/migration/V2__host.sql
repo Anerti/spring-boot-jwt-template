@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS jwt_template_app.host (
     ip_address  VARCHAR(255) UNIQUE NOT NULL,
     user_agent  VARCHAR(512) NOT NULL,
     status      jwt_template_app.host_status NOT NULL DEFAULT 'INACTIVE',
-    description VARCHAR(100),
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ,
     CONSTRAINT fk_user_id FOREIGN KEY (user_id)
