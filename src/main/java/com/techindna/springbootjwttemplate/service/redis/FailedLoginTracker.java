@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class FailedLoginTracker {
 
-    private static final Duration TTL = Duration.ofMinutes(5);
+    private static final Duration TTL = Duration.ofHours(12);
     private static final String KEY_PREFIX = "failed_logins:";
 
     private final StringRedisTemplate redis;
