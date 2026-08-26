@@ -10,4 +10,6 @@ import org.springframework.stereotype.Repository;
 public interface HostRepository extends JpaRepository<JHost, UUID> {
 
     Optional<JHost> findByIpAddressAndUserId(String ipAddress, UUID userId);
+
+    Optional<JHost> findByIpAddress(String ipAddress);
 }
