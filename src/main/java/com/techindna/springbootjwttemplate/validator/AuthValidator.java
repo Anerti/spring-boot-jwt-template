@@ -45,6 +45,7 @@ public class AuthValidator {
     }
 
     public void validateChangePassword(ChangePasswordInput request) {
+        dataValidator.checkNullData("oldPassword", request.getOldPassword());
         dataValidator.checkPasswordSecurityLevel(request.getNewPassword());
 
         if (!request.getNewPassword().equals(request.getConfirmNewPassword())) {

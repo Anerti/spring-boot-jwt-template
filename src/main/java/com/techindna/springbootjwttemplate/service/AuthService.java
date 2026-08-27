@@ -12,6 +12,7 @@ import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
+import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
 import com.techindna.springbootjwttemplate.mapper.UserMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.HostRepository;
@@ -168,6 +169,11 @@ public class AuthService {
             throw new UnauthorizedException("Invalid credentials");
         }
 
+        if (passwordEncoder.matches(request.getNewPassword(), jUser.getPassword())) {
+            logHostEvent(userHost, "Password change denied: using the current password");
+            throw new UnprocessableContentException("Cannot use the current password");
+        }
+
         jUser.setPassword(passwordEncoder.encode(request.getNewPassword()));
         authRepository.save(jUser);
         logHostEvent(userHost, "Password changed");
@@ -178,7 +184,7 @@ public class AuthService {
 
         emailService.sendMail(new EmailDetails(jUser.getEmail(), "Password Changed", "mail/password-change", variables));
 
-        return new MessageBody("Password changed");
+        return new MessageBody("Password changed successfully");
     }
 
     @Transactional
