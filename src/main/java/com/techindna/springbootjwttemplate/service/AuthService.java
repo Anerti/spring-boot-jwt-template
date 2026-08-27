@@ -1,7 +1,7 @@
 package com.techindna.springbootjwttemplate.service;
 
 import com.techindna.springbootjwttemplate.entity.enums.HostStatus;
-import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
+import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
@@ -12,6 +12,7 @@ import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
+import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
 import com.techindna.springbootjwttemplate.mapper.UserMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.HostRepository;
@@ -19,15 +20,20 @@ import com.techindna.springbootjwttemplate.repository.LogRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JEventLog;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
+import com.techindna.springbootjwttemplate.security.ResourcesAccessRules;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
-import com.techindna.springbootjwttemplate.validator.UserValidator;
+import com.techindna.springbootjwttemplate.validator.AuthValidator;
 import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
+import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -53,8 +59,9 @@ public class AuthService {
     private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
 
     private final AuthRepository authRepository;
+    private final ResourcesAccessRules resourcesAccessRules;
     private final UserMapper userMapper;
-    private final UserValidator userValidator;
+    private final AuthValidator authValidator;
     private final DataValidator dataValidator;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
@@ -68,9 +75,10 @@ public class AuthService {
     @Value("${app.base-url}")
     private String baseUrl;
 
+    // TODO: find an adapted log level for an application. Use enum to create a log type and add new column in event_log table
     @Transactional
     public MessageBody register(RegisterInput request, HttpServletRequest servletRequest) {
-        userValidator.validateRegistration(request);
+        authValidator.validateRegistration(request);
         String encodedPassword = passwordEncoder.encode(request.getPassword());
         String email = request.getEmail().strip().toLowerCase();
 
@@ -95,7 +103,7 @@ public class AuthService {
 
     @Transactional(noRollbackFor = {ForbiddenException.class, UnauthorizedException.class})
     public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
-        userValidator.validateLogin(request);
+        authValidator.validateLogin(request);
 
         JUser jUser = request.getEmail() != null && !request.getEmail().isBlank() ?
                 authRepository.findByEmail(request.getEmail().strip().toLowerCase())
@@ -135,31 +143,48 @@ public class AuthService {
         throw new UnauthorizedException(String.format("Invalid credentials. %s attempt(s) left", MAX_FAILED_LOGIN_ATTEMPTS - failedCount));
     }
 
-    private JHost recordHostAndCheckBan(JUser user, HttpServletRequest servletRequest) {
-        String ipAddress = geoIpService.extractClientIp(servletRequest);
-        String rawUserAgent = servletRequest.getHeader("User-Agent");
+    @Transactional
+    public MessageBody changePassword(ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
+        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
+        JUser jUser = authRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
-        // host status unreliable
-        JHost host = hostRepository.findByIpAddressAndUser_Id(ipAddress, user.getId())
-                .orElseGet(() -> JHost.builder()
-                        .user(user)
-                        .ipAddress(ipAddress)
-                        .userAgent((rawUserAgent != null && !rawUserAgent.isBlank()) ? rawUserAgent : "Unknown")
-                        .build());
+        resourcesAccessRules.enforceIpBinding(auth, servletRequest);
+        JHost userHost = recordHostAndCheckBan(jUser, servletRequest);
 
-        if (host.getStatus() == HostStatus.BANNED) {
-            throw new ForbiddenException(String.format("Host %s is banned from accessing this account", ipAddress));
+        if (UserStatus.LOCKED == jUser.getStatus()) {
+            logHostEvent(userHost, "Password change denied: account locked");
+            throw new ForbiddenException("Account locked");
         }
 
-        return hostRepository.saveAndFlush(host);
-    }
+        if (!jUser.getVerified()) {
+            logHostEvent(userHost, "Password change denied: unverified account");
+            throw new ForbiddenException("Account has not been verified");
+        }
 
-    private void logHostEvent(JHost host, String description) {
-        JEventLog logEntry = JEventLog.builder()
-                .host(host)
-                .description(description)
-                .build();
-        logRepository.save(logEntry);
+        authValidator.validateChangePassword(request);
+
+        if (!passwordEncoder.matches(request.getOldPassword(), jUser.getPassword())) {
+            logHostEvent(userHost, "Password change denied: wrong password");
+            throw new UnauthorizedException("Invalid credentials");
+        }
+
+        if (passwordEncoder.matches(request.getNewPassword(), jUser.getPassword())) {
+            logHostEvent(userHost, "Password change denied: using the current password");
+            throw new UnprocessableContentException("Cannot use the current password");
+        }
+
+        jUser.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        authRepository.save(jUser);
+        logHostEvent(userHost, "Password changed");
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("firstName", jUser.getFirstName());
+        addClientData(variables, servletRequest);
+
+        emailService.sendMail(new EmailDetails(jUser.getEmail(), "Password Changed", "mail/password-change", variables));
+
+        return new MessageBody("Password changed successfully");
     }
 
     @Transactional
@@ -224,6 +249,33 @@ public class AuthService {
         addClientData(variables, servletRequest);
 
         emailService.sendMail(new EmailDetails(email, subject, template, variables));
+    }
+
+    private JHost recordHostAndCheckBan(JUser user, HttpServletRequest servletRequest) {
+        String ipAddress = geoIpService.extractClientIp(servletRequest);
+        String rawUserAgent = servletRequest.getHeader("User-Agent");
+
+        // host status unreliable
+        JHost host = hostRepository.findByIpAddressAndUser_Id(ipAddress, user.getId())
+                .orElseGet(() -> JHost.builder()
+                        .user(user)
+                        .ipAddress(ipAddress)
+                        .userAgent((rawUserAgent != null && !rawUserAgent.isBlank()) ? rawUserAgent : "Unknown")
+                        .build());
+
+        if (host.getStatus() == HostStatus.BANNED) {
+            throw new ForbiddenException(String.format("Host %s is banned from accessing this account", ipAddress));
+        }
+
+        return hostRepository.saveAndFlush(host);
+    }
+
+    private void logHostEvent(JHost host, String description) {
+        JEventLog logEntry = JEventLog.builder()
+                .host(host)
+                .description(description)
+                .build();
+        logRepository.save(logEntry);
     }
 
     private GeoIpResponse resolveGeoData(HttpServletRequest request) {

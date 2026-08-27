@@ -32,7 +32,9 @@ public class SecurityConfig {
                                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(
                         auth ->
-                                auth.requestMatchers("/auth/**")
+                                auth.requestMatchers("/auth/change-password")
+                                        .authenticated()
+                                        .requestMatchers("/auth/**")
                                         .permitAll()
                                         .requestMatchers("/syn")
                                         .permitAll()

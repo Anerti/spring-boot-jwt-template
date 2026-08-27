@@ -1,5 +1,6 @@
 package com.techindna.springbootjwttemplate.controller;
 
+import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
@@ -9,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,5 +49,12 @@ public class AuthController {
             @RequestParam String email, HttpServletRequest servletRequest) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(authService.resendVerificationLink(email, servletRequest));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<MessageBody> changePassword(
+            @RequestBody ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(authService.changePassword(request, servletRequest, auth));
     }
 }

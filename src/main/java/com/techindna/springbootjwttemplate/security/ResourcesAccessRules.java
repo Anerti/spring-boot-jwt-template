@@ -2,16 +2,22 @@ package com.techindna.springbootjwttemplate.security;
 
 import com.techindna.springbootjwttemplate.entity.enums.UserRole;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
+import com.techindna.springbootjwttemplate.service.GeoIpService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Objects;
 import java.util.UUID;
+
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class ResourcesAccessRules {
+
+    private final GeoIpService geoIpService;
 
     public void grantAccessFor(UUID targetId, UserRole targetRole, HttpServletRequest request) {
         var auth = SecurityContextHolder.getContext().getAuthentication();
@@ -37,12 +43,9 @@ public class ResourcesAccessRules {
         enforceIpBinding(auth, request);
     }
 
-    private void enforceIpBinding(Authentication auth, HttpServletRequest request) {
+    public void enforceIpBinding(Authentication auth, HttpServletRequest request) {
         String jwtIp = (String) auth.getDetails();
-        String currentIp = request.getHeader("X-Forwarded-For");
-        if (currentIp == null || currentIp.isBlank()) {
-            currentIp = request.getRemoteAddr();
-        }
+        String currentIp = geoIpService.extractClientIp(request);
         if (currentIp != null && !currentIp.isBlank() && !currentIp.equals(jwtIp)) {
             throw new ForbiddenException("Session IP does not match current request");
         }
