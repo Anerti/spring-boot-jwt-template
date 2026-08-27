@@ -19,6 +19,7 @@ import com.techindna.springbootjwttemplate.repository.LogRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JEventLog;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
+import com.techindna.springbootjwttemplate.security.ResourcesAccessRules;
 import com.techindna.springbootjwttemplate.service.mail.EmailService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
@@ -26,6 +27,7 @@ import com.techindna.springbootjwttemplate.validator.DataValidator;
 import com.techindna.springbootjwttemplate.validator.AuthValidator;
 import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
 import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -56,6 +58,7 @@ public class AuthService {
     private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
 
     private final AuthRepository authRepository;
+    private final ResourcesAccessRules resourcesAccessRules;
     private final UserMapper userMapper;
     private final AuthValidator authValidator;
     private final DataValidator dataValidator;
@@ -140,11 +143,12 @@ public class AuthService {
     }
 
     @Transactional
-    public MessageBody changePassword(ChangePasswordInput request, HttpServletRequest servletRequest) {
+    public MessageBody changePassword(ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
         String userId = SecurityContextHolder.getContext().getAuthentication().getName();
         JUser jUser = authRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
+        resourcesAccessRules.enforceIpBinding(auth, servletRequest);
         JHost userHost = recordHostAndCheckBan(jUser, servletRequest);
 
         if (UserStatus.LOCKED == jUser.getStatus()) {

@@ -37,7 +37,7 @@ public class ResourcesAccessRules {
         enforceIpBinding(auth, request);
     }
 
-    private void enforceIpBinding(Authentication auth, HttpServletRequest request) {
+    public void enforceIpBinding(Authentication auth, HttpServletRequest request) {
         String jwtIp = (String) auth.getDetails();
         String currentIp = request.getHeader("X-Forwarded-For");
         if (currentIp == null || currentIp.isBlank()) {
