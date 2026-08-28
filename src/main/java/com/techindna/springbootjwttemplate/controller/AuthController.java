@@ -1,5 +1,6 @@
 package com.techindna.springbootjwttemplate.controller;
 
+import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
@@ -57,6 +58,13 @@ public class AuthController {
             @RequestBody ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
         return ResponseEntity.status(HttpStatus.OK)
                 .body(authService.changePassword(request, servletRequest, auth));
+    }
+
+    @PostMapping("/change-email")
+    public ResponseEntity<MessageBody> changeEmail(
+            @RequestBody ChangeEmailInput request, HttpServletRequest servletRequest, Authentication auth) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(authService.changeEmail(request, servletRequest, auth));
     }
 
     @PostMapping("/unlock")
