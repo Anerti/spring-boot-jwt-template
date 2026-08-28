@@ -12,6 +12,7 @@ public class VerificationCodeStore {
 
     private static final Duration TTL = Duration.ofMinutes(15);
     private static final String KEY_PREFIX = "verification:";
+    private static final String PENDING_EMAIL_PREFIX = "pending_email:";
 
     private final StringRedisTemplate redis;
 
@@ -27,4 +28,15 @@ public class VerificationCodeStore {
         redis.delete(KEY_PREFIX + token);
     }
 
+    public void savePendingEmail(String token, String newEmail) {
+        redis.opsForValue().set(PENDING_EMAIL_PREFIX + token, newEmail, TTL);
+    }
+
+    public Optional<String> getPendingEmailByToken(String token) {
+        return Optional.ofNullable(redis.opsForValue().get(PENDING_EMAIL_PREFIX + token));
+    }
+
+    public void deletePendingEmailByToken(String token) {
+        redis.delete(PENDING_EMAIL_PREFIX + token);
+    }
 }
