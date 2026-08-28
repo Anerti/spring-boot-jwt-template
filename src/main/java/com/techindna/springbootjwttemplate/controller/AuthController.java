@@ -4,6 +4,7 @@ import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
+import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -56,5 +57,12 @@ public class AuthController {
             @RequestBody ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
         return ResponseEntity.status(HttpStatus.OK)
                 .body(authService.changePassword(request, servletRequest, auth));
+    }
+
+    @PostMapping("/unlock")
+    public ResponseEntity<MessageBody> unlockAccount(
+            @RequestBody UnlockAccountInput request, HttpServletRequest servletRequest) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(authService.unlockAccount(request, servletRequest));
     }
 }

@@ -5,6 +5,7 @@ import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
+import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.entity.GeoIpResponse;
 import com.techindna.springbootjwttemplate.entity.User;
@@ -188,6 +189,26 @@ public class AuthService {
     }
 
     @Transactional
+    public MessageBody unlockAccount(UnlockAccountInput request, HttpServletRequest servletRequest) {
+        dataValidator.validateEmail("email", request.getEmail());
+        String normalizedEmail = request.getEmail().strip().toLowerCase();
+        JUser jUser = authRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new ForbiddenException("Account not locked"));
+
+        JHost userHost = recordHostAndCheckBan(jUser, servletRequest);
+        if (jUser.getStatus() != UserStatus.LOCKED) {
+            logHostEvent(userHost, "Account unlock failed: account not locked");
+            throw new ForbiddenException("Account not locked");
+        }
+
+        sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
+                jUser.getUsername(), "Account Unlock", "mail/unlock-account", servletRequest);
+
+        logHostEvent(userHost, "Account unlock: email sent");
+        return new MessageBody("A verification link has been sent to your email to unlock your account");
+    }
+
+    @Transactional
     public VerifyRegistrationResponse verify(UUID token, HttpServletRequest servletRequest) {
         String tokenStr = token.toString();
         String email = verificationCodeStore.getEmailByToken(tokenStr)
@@ -202,6 +223,13 @@ public class AuthService {
             jUser.setVerified(true);
             authRepository.save(jUser);
             logHostEvent(host, "Registration complete: account verified");
+        }
+            
+        if (jUser.getStatus() == UserStatus.LOCKED) {
+            jUser.setStatus(UserStatus.ACTIVE);
+            authRepository.save(jUser);
+            failedLoginTracker.reset(jUser.getId());
+            logHostEvent(host, "Account unlock: succeed");
         }
 
         logHostEvent(host, "Verification successful: Token accepted");

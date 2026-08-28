@@ -23,4 +23,8 @@ public class FailedLoginTracker {
         }
         return count != null ? count.intValue() : 0;
     }
+
+    public void reset(UUID userId) {
+        redis.delete(KEY_PREFIX + userId.toString());
+    }
 }

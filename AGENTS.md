@@ -69,7 +69,8 @@ com.techindna.springbootjwttemplate
 │   ├── UserService.java                  # getUser + updateUser (with ResourcesAccessRules)
 │   ├── GeoIpService.java                # IP lookup, client IP extraction
 │   ├── VerificationCodeStore.java        # Redis-based verification code storage (15 min TTL, key prefix "verification:")
-│   ├── FailedLoginTracker.java           # Redis-based failed login counter (12 h TTL, key prefix "failed_logins:")
+│   ├── redis/
+│   │   └── FailedLoginTracker.java       # Redis-based failed login counter (12 h TTL, key prefix "failed_logins:"), reset() clears counter
 │   └── mail/
 │       ├── EmailService.java             # email service interface
 │       └── EmailSenderService.java       # email service implementation (Thymeleaf + @Async("mailExecutor"))
@@ -119,9 +120,9 @@ src/main/resources/
 | GET    | /auth/verification/{token}     | —    | Verify token → 200 with JWT token + user. Consumes tokens from all verification flows        |
 | POST   | /auth/login                    | —    | Login → 202, sends verification code by email                                                |
 | POST   | /auth/resend-link              | —    | Resend verification code → 202                                                              |
-| POST   | /auth/change-password          | JWT  | Request password change → 202 *(spec'd, not yet implemented)*                                |
+| POST   | /auth/change-password          | JWT  | Request password change → 202                                                                 |
 | POST   | /auth/change-email             | JWT  | Request email change → 202 *(spec'd, not yet implemented)*                                   |
-| POST   | /auth/unlock                   | JWT  | Request to unlock a locked account → 202 *(spec'd, not yet implemented)*                     |
+| POST   | /auth/unlock                   | —    | Recovery: unlock a LOCKED account → 202                                                       |
 | GET    | /hosts                         | JWT  | List hosts (paginated). Non-admin see own hosts only *(spec'd, not yet implemented)*         |
 | GET    | /hosts/{hostId}                | JWT  | Get host by ID with GeoIP data *(spec'd, not yet implemented)*                              |
 | PATCH  | /hosts/{hostId}                | JWT  | Ban a host *(spec'd, not yet implemented)*                                                   |
@@ -253,15 +254,15 @@ On each authentication attempt, `AuthService.recordHostAndCheckBan()` looks up o
 
 **Resend**: `POST /auth/resend-link?email=...` → validate email → find unverified user → generate new token → store in Redis → send email.
 
-**Unlock** (account locked): `POST /auth/unlock` (JWT) → accept email → check privileges → generate token → store in Redis → send unlock email → user clicks link → `GET /auth/verification/{token}` → validate → unlock account → return JWT.
+**Unlock** (account locked): `POST /auth/unlock` (public recovery, no JWT) → validate email → find LOCKED account (else 403, enumeration-safe) → check requesting host not banned → generate token → store in Redis → send unlock email → user clicks link → `GET /auth/verification/{token}` → validate → set status ACTIVE + reset failed-login counter → return JWT.
 
-**Change password** (spec'd): `POST /auth/change-password` (JWT) → validate current credentials + new password → generate token → send confirmation email → click link → `GET /auth/verification/{token}` → update password → return JWT.
+**Change password**: `POST /auth/change-password` (JWT) → validate current credentials + new password (block reuse) → generate token → send confirmation email → click link → `GET /auth/verification/{token}` → update password → return JWT.
 
 **Change email** (spec'd): `POST /auth/change-email` (JWT) → validate current credentials + new email → generate token → send confirmation email to new address → click link → `GET /auth/verification/{token}` → update email → return JWT.
 
 All verification flows consume tokens via the same `GET /auth/verification/{token}` endpoint. Redis key pattern: `verification:{token}` → email address, TTL 15 minutes.
 
-> **Implementation note**: `POST /auth/change-password`, `POST /auth/change-email`, and `POST /auth/unlock` are defined in the OpenAPI spec (`docs/api/api.yaml`) but their DTOs and controller methods are not yet implemented. The verification endpoint handles all token-consuming flows generically.
+> **Implementation note**: `POST /auth/change-email` is defined in the OpenAPI spec (`docs/api/api.yaml`) but its DTO and controller method are not yet implemented. `POST /auth/change-password`, `POST /auth/unlock`, and `GET /auth/verification/{token}` are implemented. The verification endpoint handles all token-consuming flows generically.
 
 ## Conventions
 
