@@ -12,7 +12,6 @@ import com.techindna.springbootjwttemplate.entity.User;
 import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
-import com.techindna.springbootjwttemplate.exception.http.NotFoundException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
 import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
 import com.techindna.springbootjwttemplate.mapper.UserMapper;
@@ -225,7 +224,7 @@ public class AuthService {
             authRepository.save(jUser);
             logHostEvent(host, "Registration complete: account verified");
         }
-
+            
         if (jUser.getStatus() == UserStatus.LOCKED) {
             jUser.setStatus(UserStatus.ACTIVE);
             authRepository.save(jUser);
