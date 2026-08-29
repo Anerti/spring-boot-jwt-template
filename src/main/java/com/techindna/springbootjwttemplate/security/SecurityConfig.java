@@ -34,6 +34,8 @@ public class SecurityConfig {
                         auth ->
                                 auth.requestMatchers("/auth/change-password")
                                         .authenticated()
+                                        .requestMatchers("/auth/change-email")
+                                        .authenticated()
                                         .requestMatchers("/auth/**")
                                         .permitAll()
                                         .requestMatchers("/syn")

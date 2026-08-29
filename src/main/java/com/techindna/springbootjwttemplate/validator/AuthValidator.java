@@ -1,5 +1,6 @@
 package com.techindna.springbootjwttemplate.validator;
 
+import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
@@ -42,6 +43,12 @@ public class AuthValidator {
         dataValidator.validateName("lastName", request.getLastName());
 
         dataValidator.validateUsername(request.getUsername());
+    }
+
+    public void validateChangeEmail(ChangeEmailInput request) {
+        dataValidator.checkNullData("newEmail", request.getNewEmail());
+        dataValidator.validateEmail("newEmail", request.getNewEmail());
+        dataValidator.checkNullData("password", request.getPassword());
     }
 
     public void validateChangePassword(ChangePasswordInput request) {

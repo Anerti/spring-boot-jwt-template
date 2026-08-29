@@ -1,6 +1,7 @@
 package com.techindna.springbootjwttemplate.service;
 
 import com.techindna.springbootjwttemplate.entity.enums.HostStatus;
+import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
@@ -34,10 +35,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -188,6 +186,43 @@ public class AuthService {
         return new MessageBody("Password changed successfully");
     }
 
+    @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
+    public MessageBody changeEmail(ChangeEmailInput request, HttpServletRequest servletRequest, Authentication auth) {
+        String userId = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
+        JUser jUser = authRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+
+        resourcesAccessRules.enforceIpBinding(auth, servletRequest);
+        JHost userHost = recordHostAndCheckBan(jUser, servletRequest);
+
+        if (UserStatus.LOCKED == jUser.getStatus()) {
+            logHostEvent(userHost, "Email change denied: account locked");
+            throw new ForbiddenException("Account locked");
+        }
+
+        authValidator.validateChangeEmail(request);
+
+        String normalizedNewEmail = request.getNewEmail().strip().toLowerCase();
+        if (normalizedNewEmail.equals(jUser.getEmail())) {
+            logHostEvent(userHost, "Email change denied: same email");
+            throw new UnprocessableContentException("The new email must be different from the current email");
+        }
+
+        if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
+            if (authRepository.findByEmail(normalizedNewEmail).isPresent()) {
+                throw new ConflictException("Cannot use this email");
+            }
+
+            sendChangeEmailConfirmation(jUser, normalizedNewEmail, servletRequest);
+
+            logHostEvent(userHost, "Email change pending: confirmation sent");
+            return new MessageBody("A verification link has been sent to your new email address");
+        }
+
+        logHostEvent(userHost, "Email change denied: wrong password");
+        throw new UnauthorizedException("Invalid credentials");
+    }
+
     @Transactional
     public MessageBody unlockAccount(UnlockAccountInput request, HttpServletRequest servletRequest) {
         dataValidator.validateEmail("email", request.getEmail());
@@ -218,6 +253,7 @@ public class AuthService {
                 .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
 
         JHost host = recordHostAndCheckBan(jUser, servletRequest);
+        logHostEvent(host, "Verification successful: Token accepted");
 
         if (!jUser.getVerified()) {
             jUser.setVerified(true);
@@ -232,7 +268,13 @@ public class AuthService {
             logHostEvent(host, "Account unlock: succeed");
         }
 
-        logHostEvent(host, "Verification successful: Token accepted");
+        Optional<String> pendingEmail = verificationCodeStore.getPendingEmailByToken(tokenStr);
+        if (pendingEmail.isPresent()) {
+            jUser.setEmail(pendingEmail.get());
+            authRepository.save(jUser);
+            logHostEvent(host, "Email changed");
+            verificationCodeStore.deletePendingEmailByToken(tokenStr);
+        }
 
         verificationCodeStore.deleteByToken(tokenStr);
 
@@ -277,6 +319,23 @@ public class AuthService {
         addClientData(variables, servletRequest);
 
         emailService.sendMail(new EmailDetails(email, subject, template, variables));
+    }
+
+    private void sendChangeEmailConfirmation(JUser jUser, String newEmail, HttpServletRequest servletRequest) {
+        String token = UUID.randomUUID().toString();
+        verificationCodeStore.saveToken(jUser.getEmail(), token);
+        verificationCodeStore.savePendingEmail(token, newEmail);
+
+        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("verificationUrl", verificationUrl);
+        variables.put("firstName", jUser.getFirstName());
+        variables.put("email", newEmail);
+        variables.put("oldEmail", jUser.getEmail());
+        addClientData(variables, servletRequest);
+
+        emailService.sendMail(new EmailDetails(newEmail, "Confirm your new email address", "mail/change-email", variables));
     }
 
     private JHost recordHostAndCheckBan(JUser user, HttpServletRequest servletRequest) {
