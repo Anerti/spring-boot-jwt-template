@@ -4,6 +4,7 @@ import com.techindna.springbootjwttemplate.security.jwt.JwtAuthenticationFilter;
 import com.techindna.springbootjwttemplate.exception.ErrorBody;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -32,17 +33,39 @@ public class SecurityConfig {
                                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(
                         auth ->
-                                auth.requestMatchers("/auth/change-password")
+                                auth.requestMatchers(HttpMethod.GET, "/syn")
+                                        .permitAll()
+                                        .requestMatchers(HttpMethod.POST, "/auth/register")
+                                        .permitAll()
+                                        .requestMatchers(HttpMethod.GET, "/auth/verification/**")
+                                        .permitAll()
+                                        .requestMatchers(HttpMethod.POST, "/auth/login")
+                                        .permitAll()
+                                        .requestMatchers(HttpMethod.POST, "/auth/resend-link")
+                                        .permitAll()
+                                        .requestMatchers(HttpMethod.POST, "/auth/unlock")
+                                        .permitAll()
+                                        .requestMatchers(HttpMethod.POST, "/auth/change-password")
                                         .authenticated()
-                                        .requestMatchers("/auth/change-email")
+                                        .requestMatchers(HttpMethod.POST, "/auth/change-email")
                                         .authenticated()
-                                        .requestMatchers("/auth/**")
+                                        .requestMatchers(HttpMethod.GET, "/geoip")
                                         .permitAll()
-                                        .requestMatchers("/syn")
+                                        .requestMatchers(HttpMethod.GET, "/geoip/**")
                                         .permitAll()
-                                        .requestMatchers("/geoip/**")
-                                        .permitAll()
-                                        .requestMatchers("/users/**")
+                                        .requestMatchers(HttpMethod.GET, "/users")
+                                        .authenticated()
+                                        .requestMatchers(HttpMethod.GET, "/users/**")
+                                        .authenticated()
+                                        .requestMatchers(HttpMethod.PATCH, "/users/**")
+                                        .authenticated()
+                                        .requestMatchers(HttpMethod.DELETE, "/users/**")
+                                        .authenticated()
+                                        .requestMatchers(HttpMethod.GET, "/hosts")
+                                        .authenticated()
+                                        .requestMatchers(HttpMethod.GET, "/hosts/**")
+                                        .authenticated()
+                                        .requestMatchers(HttpMethod.PATCH, "/hosts/**")
                                         .authenticated()
                                         .anyRequest()
                                         .authenticated())
