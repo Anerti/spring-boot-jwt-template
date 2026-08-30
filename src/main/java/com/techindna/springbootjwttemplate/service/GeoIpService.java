@@ -11,6 +11,8 @@ import com.techindna.springbootjwttemplate.mapper.GeoIpMapper;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +29,8 @@ public class GeoIpService {
 
     @Value("${geoip.trust-x-forwarded-for}")
     private boolean trustXForwardedFor;
+
+    private static final Logger log = LoggerFactory.getLogger(GeoIpService.class);
 
     public GeoIpResponse lookup(String ip) {
         if (!dataValidator.isValidAddressFormat(ip)) {
@@ -53,6 +57,16 @@ public class GeoIpService {
         return (xForwardedFor != null && !xForwardedFor.isBlank()) ?
                 xForwardedFor.split(",")[0].trim() :
                 request.getRemoteAddr();
+    }
+
+    public GeoIpResponse resolveGeoData(HttpServletRequest request) {
+        String ip = extractClientIp(request);
+        try {
+            return lookup(ip);
+        } catch (RuntimeException e) {
+            log.warn("GeoIP lookup failed for IP {}: {}", ip, e.getMessage());
+            return null;
+        }
     }
 
 }

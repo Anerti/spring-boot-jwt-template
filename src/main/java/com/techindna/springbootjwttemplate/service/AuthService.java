@@ -41,8 +41,6 @@ import java.util.*;
 import jakarta.servlet.http.HttpServletRequest;
 
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -53,7 +51,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final DateTimeFormatter REGISTERED_AT_FORMAT =
             DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
     private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -375,16 +372,6 @@ public class AuthService {
         logRepository.save(logEntry);
     }
 
-    private GeoIpResponse resolveGeoData(HttpServletRequest request) {
-        String ip = geoIpService.extractClientIp(request);
-        try {
-            return geoIpService.lookup(ip);
-        } catch (RuntimeException e) {
-            log.warn("GeoIP lookup failed for IP {}: {}", ip, e.getMessage());
-            return null;
-        }
-    }
-
     private void addClientData(Map<String, Object> variables, HttpServletRequest request) {
         String clientIp = geoIpService.extractClientIp(request);
         String userAgent = request.getHeader("User-Agent");
@@ -393,7 +380,7 @@ public class AuthService {
         variables.put("userAgent", userAgent != null ? userAgent : "Unknown");
         variables.put("time", REGISTERED_AT_FORMAT.format(Instant.now()));
 
-        GeoIpResponse geo = resolveGeoData(request);
+        GeoIpResponse geo = geoIpService.resolveGeoData(request);
         variables.put("city", geo != null && geo.city() != null ? geo.city() : "N/A");
         variables.put("country", geo != null && geo.country() != null ? geo.country() : "N/A");
         variables.put("countryCode", geo != null && geo.countryCode() != null ? geo.countryCode() : "N/A");
