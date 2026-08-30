@@ -29,27 +29,13 @@
                     <tr>
                         <td style="padding: 32px;">
                             <p style="margin: 0 0 16px; color: #333333; font-size: 15px; mso-line-height-rule: exactly; line-height: 24px;">
-                                Hello <span th:text="${firstName}">User</span>,
+                                Hello <strong th:text="${firstName}">User</strong>,
+                            </p>
+                            <p style="margin: 0 0 24px; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px;">
+                                We locked your account after several failed login attempts. No one can sign in — including you — until the lockout is cleared.
                             </p>
 
-                            <p style="margin: 0 0 16px; color: #333333; font-size: 15px; mso-line-height-rule: exactly; line-height: 24px;">
-                                Your account has been <strong>locked</strong> after multiple consecutive failed login attempts. While the account is locked, no one can sign in to it — including you.
-                            </p>
-
-                            <!-- Primary action -->
-                            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-top: 24px;">
-                                <tr>
-                                    <td align="center">
-                                        <a th:href="${unlockUrl}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none; padding: 14px 32px; border-radius: 6px; mso-line-height-rule: exactly; line-height: 20px;">Unlock my account</a>
-                                    </td>
-                                </tr>
-                            </table>
-
-                            <p style="margin: 24px 0 0; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px;">
-                                If this wasn't you, don't worry — the button above still verifies your identity before unlocking the account. Once you're back in, we recommend resetting your password. The link expires in 15 minutes.
-                            </p>
-
-                            <!-- Activity -->
+                            <!-- Attempt details -->
                             <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 24px; border-top: 1px solid #e8e8e8;">
                                 <tr>
                                     <td style="padding: 16px 0 8px;">
@@ -94,8 +80,8 @@
                     <!-- Footer -->
                     <tr>
                         <td style="background-color: #f9f9fb; padding: 16px 32px; text-align: center; border-top: 1px solid #e8e8e8;">
-                            <p style="margin: 0; color: #777777; font-size: 12px; mso-line-height-rule: exactly; line-height: 18px;">
-                                If you did not expect this email, you can safely ignore it.
+                            <p style="margin: 0; color: #cc0000; font-size: 12px; mso-line-height-rule: exactly; line-height: 18px;">
+                                If you didn't trigger this lockout, contact support to verify your identity. Reset your password once the lockout is cleared.
                             </p>
                         </td>
                     </tr>
