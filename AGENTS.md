@@ -16,20 +16,23 @@ com.techindna.springbootjwttemplate
 │                                         #   - file:/mnt/geoip/GeoLite2-City.mmdb (NFS-mounted)
 ├── security/
 │   ├── SecurityConfig.java               # SecurityFilterChain, PasswordEncoder (Argon2id)
-│   ├── ResourcesAccessRules.java         # authorization: self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding
+│   ├── ResourcesAccessRules.java         # authorization: ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding
 │   └── jwt/
 │       ├── JwtAuthenticationFilter.java   # JWT filter (extracts userId + role + ip from claims, no UserDetailsService)
 │       └── JwtTokenProvider.java          # JWT create/parse (HMAC-SHA, BASE64 secret, configurable TTL)
 ├── controller/
-│   ├── AuthController.java               # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link
+│   ├── AuthController.java               # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link, POST /auth/change-password, POST /auth/change-email, POST /auth/unlock
 │   ├── GeoIpController.java              # GET /geoip, GET /geoip/{ip}
 │   ├── SynController.java                # GET /syn
 │   └── UserController.java               # GET/PATCH/DELETE /users/{userId}
 ├── dto/
-│   ├── LoginInput.java                   # login request body (username, email, password)
-│   ├── MessageBody.java                  # { message } response
-│   ├── RegisterInput.java                # register request body
+│   ├── LoginInput.java                   # login request body (username/email, password)
+│   ├── RegisterInput.java                # registration request body
+│   ├── ChangePasswordInput.java          # change-password request body
+│   ├── ChangeEmailInput.java             # change-email request body
+│   ├── UnlockAccountInput.java           # unlock request body (email)
 │   ├── UpdateUserInput.java              # user update request body
+│   ├── MessageBody.java                  # { message } response
 │   └── VerifyRegistrationResponse.java   # token + user response
 ├── entity/
 │   ├── GeoIpResponse.java               # GeoIP lookup result record
@@ -65,18 +68,20 @@ com.techindna.springbootjwttemplate
 │       ├── JHost.java                    # JPA entity (PostgreSQL "host" table)
 │       └── JEventLog.java                # JPA entity (PostgreSQL "event_log" table)
 ├── service/
-│   ├── AuthService.java                  # register + login + verification + resend + host/event logging + failed login tracking
+│   ├── AuthService.java                  # register + login + verification + resend + unlock + change-password/email + failed login tracking
 │   ├── UserService.java                  # getUser + updateUser (with ResourcesAccessRules)
-│   ├── GeoIpService.java                # IP lookup, client IP extraction
+│   ├── GeoIpService.java                 # IP lookup, client IP extraction
 │   ├── VerificationCodeStore.java        # Redis-based verification code storage (15 min TTL, key prefix "verification:")
 │   ├── redis/
 │   │   └── FailedLoginTracker.java       # Redis-based failed login counter (12 h TTL, key prefix "failed_logins:"), reset() clears counter
 │   └── mail/
+│       ├── AuthMailService.java          # composes + dispatches verification emails (token→Redis→link→send)
 │       ├── EmailService.java             # email service interface
 │       └── EmailSenderService.java       # email service implementation (Thymeleaf + @Async("mailExecutor"))
 └── validator/
     ├── DataValidator.java                # low-level format checks (email, name, username, password, IP)
-    └── UserValidator.java                # registration + login + update rules
+    ├── AuthValidator.java                # auth + change-password/email validation rules
+    └── UserValidator.java                # user update validation rules
 
 docs/
 ├── api/api.yaml          # OpenAPI 3.0.3 spec (source of truth for endpoints)
@@ -92,8 +97,12 @@ src/main/resources/
 │   └── GeoLite2-City.mmdb     # MaxMind GeoIP database
 └── templates/
     └── mail/
-        ├── verification.html              # registration email template
-        └── login-verification.html        # login email template
+        ├── verification.html              # registration verification email
+        ├── login-verification.html        # login verification email
+        ├── unlock-account.html            # account unlock email
+        ├── account-locked.html            # account locked (security alert) email
+        ├── change-email.html              # confirm new email address email
+        └── password-change.html           # password changed notification email
 ```
 
 ## Domain entities
@@ -121,7 +130,7 @@ src/main/resources/
 | POST   | /auth/login                    | —    | Login → 202, sends verification code by email                                                |
 | POST   | /auth/resend-link              | —    | Resend verification code → 202                                                              |
 | POST   | /auth/change-password          | JWT  | Request password change → 202                                                                 |
-| POST   | /auth/change-email             | JWT  | Request email change → 202 *(spec'd, not yet implemented)*                                   |
+| POST   | /auth/change-email             | JWT  | Request email change → 202                                                                     |
 | POST   | /auth/unlock                   | —    | Recovery: unlock a LOCKED account → 202                                                       |
 | GET    | /hosts                         | JWT  | List hosts (paginated). Non-admin see own hosts only *(spec'd, not yet implemented)*         |
 | GET    | /hosts/{hostId}                | JWT  | Get host by ID with GeoIP data *(spec'd, not yet implemented)*                              |
@@ -155,7 +164,7 @@ src/main/resources/
 - Gmail SMTP (smtp.gmail.com:587, STARTTLS)
 - Async sending via `@Async("mailExecutor")` — dedicated `ThreadPoolTaskExecutor` (core:5, max:20, queue:100)
 - Thymeleaf HTML templates in `src/main/resources/templates/mail/`
-- Email variables: `verificationUrl`, `firstName`, `lastName`, `username`, `email`, `clientIp`, `userAgent`, `time`, `city`, `country`, `countryCode`, `timezone`, `latitude`, `longitude`
+- Email variables: `verificationUrl`, `unlockUrl`, `firstName`, `lastName`, `username`, `email`, `oldEmail`, `clientIp`, `userAgent`, `time`, `city`, `country`, `countryCode`, `timezone`, `latitude`, `longitude`
 - `MailSendException` caught by `GlobalExceptionHandler` — returns generic message, logs detail
 
 ### GeoIP
@@ -206,19 +215,16 @@ spring.data.redis.url=
 
 ```bash
 # build (JDK 26 toolchain required)
-JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew build
+JAVA_HOME=$HOME/.jdks/openjdk-26.0.2.1 ./gradlew build
 
 # test
-JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew test
+JAVA_HOME=$HOME/.jdks/openjdk-26.0.2.1 ./gradlew test
 
 # run
-JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew bootRun
-
-# format
-JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew spotlessApply
+JAVA_HOME=$HOME/.jdks/openjdk-26.0.2.1 ./gradlew bootRun
 ```
 
-> `JAVA_HOME` must point to JDK 26 — the system default is JDK 26.
+> No Spotless/format task is wired up — follow the Code style convention below manually. `JAVA_HOME` must point to the installed JDK 26 (`$HOME/.jdks/openjdk-26.0.2.1`); there is no `java` on PATH by default.
 
 ## Security model
 
@@ -241,7 +247,7 @@ Injected into services, called before operations. Rules:
 - **IP binding**: if JWT carries `ip_address` claim, current request IP must match. Mismatch → 403 `Session IP does not match current request`
 
 ### Failed login tracking & account lockout
-`FailedLoginTracker` (Redis): counts failed attempts per userId, key `failed_logins:{userId}`, TTL 12h. After **5 failed attempts** the account status is set to `LOCKED` (`UserStatus.LOCKED`) and login is rejected with 403 `Account locked`. A TODO remains to send a notification email on lockout (see `AuthService.java:127`).
+`FailedLoginTracker` (Redis): counts failed attempts per userId, key `failed_logins:{userId}`, TTL 12h. After **5 failed attempts** the account status is set to `LOCKED` (`UserStatus.LOCKED`) and login is rejected with 403 `Account locked`. On the 5th failure a notification email is sent via `AuthMailService.sendAccountLockedNotification()` using the `account-locked` template.
 
 ### Host tracking & event logging
 On each authentication attempt, `AuthService.recordHostAndCheckBan()` looks up or creates a `Host` record (ip_address + user_agent + user_id), checks if host is `BANNED` (→ 403), saves it, and logs the event to `event_log`. Host status is marked as "unreliable" in the code; only the BANNED check is enforced.
@@ -258,23 +264,23 @@ On each authentication attempt, `AuthService.recordHostAndCheckBan()` looks up o
 
 **Change password**: `POST /auth/change-password` (JWT) → validate current credentials + new password (block reuse) → generate token → send confirmation email → click link → `GET /auth/verification/{token}` → update password → return JWT.
 
-**Change email** (spec'd): `POST /auth/change-email` (JWT) → validate current credentials + new email → generate token → send confirmation email to new address → click link → `GET /auth/verification/{token}` → update email → return JWT.
+**Change email**: `POST /auth/change-email` (JWT) → validate current credentials + new email → generate token → send confirmation email to new address → click link → `GET /auth/verification/{token}` → update email → return JWT.
 
 All verification flows consume tokens via the same `GET /auth/verification/{token}` endpoint. Redis key pattern: `verification:{token}` → email address, TTL 15 minutes.
 
-> **Implementation note**: `POST /auth/change-email` is defined in the OpenAPI spec (`docs/api/api.yaml`) but its DTO and controller method are not yet implemented. `POST /auth/change-password`, `POST /auth/unlock`, and `GET /auth/verification/{token}` are implemented. The verification endpoint handles all token-consuming flows generically.
+> **Implementation note**: register, login, resend, unlock, change-password, and change-email all generate tokens via `AuthMailService` and consume them through the single `GET /auth/verification/{token}` endpoint, which handles every token-consuming flow generically. `VerificationCodeStore.savePendingEmail(token, email)` carries the pending email for the change-email flow.
 
 ## Conventions
 
 - **IDs**: all UUIDs (`gen_random_uuid()`, `java.util.UUID`)
 - **Package**: `com.techindna.springbootjwttemplate`
 - **Layer naming**: J-prefix for JPA entities (`JUser`, `JHost`, `JEventLog`), domain records in `entity/`, Lombok `@Getter @Setter @NoArgsConstructor`
-- **Validation**: `DataValidator` pattern (void return, throws `UnprocessableContentException` (422)), not `@Valid`
+- **Validation**: `DataValidator` (format) + `AuthValidator`/`UserValidator` (rules) — void return, throw `UnprocessableContentException` (422), not `@Valid`
 - **Error handling**: custom exceptions → `GlobalExceptionHandler` → JSON `ErrorBody` (status, error, message, timestamp)
 - **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
 - **JWT auth**: claim-based — extract `userId` + `role` + `ip_address` from token, no `UserDetailsService`
 - **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
-- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
+- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor(targetId, targetRole, request)` before operations and `enforceIpBinding(auth, request)` on JWT endpoints. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
 - **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`, `/geoip`)
 - **GeoIP**: MaxMind MMDB — either `classpath:geoip/GeoLite2-City.mmdb` (bundled) or `file:/mnt/geoip/GeoLite2-City.mmdb` (NFS-mounted). Update manually — re-download from MaxMind and replace.
