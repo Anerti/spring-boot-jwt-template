@@ -132,11 +132,11 @@ public class AuthService {
         int failedCount = failedLoginTracker.increment(jUser.getId());
         logHostEvent(host, "LOGIN_FAILED : invalid credentials", EventLogStatus.SECURITY);
 
-        // TODO: send an email to notify the user about their account
         if (failedCount == MAX_FAILED_LOGIN_ATTEMPTS) {
             jUser.setStatus(UserStatus.LOCKED);
             authRepository.save(jUser);
             logHostEvent(host, "ACCOUNT_LOCKED : repeated failed login attempts", EventLogStatus.SECURITY);
+            sendAccountLockedNotification(jUser, servletRequest);
             throw new ForbiddenException("Account has been locked due to multiple failed logins");
         }
 
@@ -320,6 +320,14 @@ public class AuthService {
         addClientData(variables, servletRequest);
 
         emailService.sendMail(new EmailDetails(email, subject, template, variables));
+    }
+
+    private void sendAccountLockedNotification(JUser jUser, HttpServletRequest servletRequest) {
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("firstName", jUser.getFirstName());
+        addClientData(variables, servletRequest);
+
+        emailService.sendMail(new EmailDetails(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables));
     }
 
     private void sendChangeEmailConfirmation(JUser jUser, String newEmail, HttpServletRequest servletRequest) {
