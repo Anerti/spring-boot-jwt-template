@@ -80,8 +80,17 @@
                             </table>
 
                             <p style="margin: 24px 0 0; color: #555555; font-size: 14px; mso-line-height-rule: exactly; line-height: 22px;">
-                                To unlock your account, use the account recovery option from the login screen. You will receive a verification link by email to confirm the unlock.
+                                We have secured your account. Click the button below to verify your identity and unlock it. This link expires in 15 minutes.
                             </p>
+
+                            <!-- Unlock button -->
+                            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-top: 16px;">
+                                <tr>
+                                    <td align="center">
+                                        <a th:href="${unlockUrl}" style="display: inline-block; background-color: #1a1a2e; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none; padding: 14px 32px; border-radius: 6px; mso-line-height-rule: exactly; line-height: 20px;">Unlock my account</a>
+                                    </td>
+                                </tr>
+                            </table>
                         </td>
                     </tr>
 

@@ -320,8 +320,13 @@ public class AuthService {
     }
 
     private void sendAccountLockedNotification(JUser jUser, HttpServletRequest servletRequest) {
+        String token = UUID.randomUUID().toString();
+        verificationCodeStore.saveToken(jUser.getEmail(), token);
+        String unlockUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+
         Map<String, Object> variables = new LinkedHashMap<>();
         variables.put("firstName", jUser.getFirstName());
+        variables.put("unlockUrl", unlockUrl);
         addClientData(variables, servletRequest);
 
         emailService.sendMail(new EmailDetails(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables));
