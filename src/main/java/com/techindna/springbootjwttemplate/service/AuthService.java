@@ -9,9 +9,7 @@ import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
-import com.techindna.springbootjwttemplate.entity.GeoIpResponse;
 import com.techindna.springbootjwttemplate.entity.User;
-import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
@@ -24,7 +22,7 @@ import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JEventLog;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.security.ResourcesAccessRules;
-import com.techindna.springbootjwttemplate.service.mail.EmailService;
+import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
@@ -33,15 +31,9 @@ import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
 import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
-
 import jakarta.servlet.http.HttpServletRequest;
-
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -51,8 +43,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private static final DateTimeFormatter REGISTERED_AT_FORMAT =
-            DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
     private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
 
     private final AuthRepository authRepository;
@@ -61,16 +51,13 @@ public class AuthService {
     private final AuthValidator authValidator;
     private final DataValidator dataValidator;
     private final PasswordEncoder passwordEncoder;
-    private final EmailService emailService;
+    private final AuthMailService authMailService;
     private final VerificationCodeStore verificationCodeStore;
     private final JwtTokenProvider jwtTokenProvider;
     private final GeoIpService geoIpService;
     private final HostRepository hostRepository;
     private final LogRepository logRepository;
     private final FailedLoginTracker failedLoginTracker;
-
-    @Value("${app.base-url}")
-    private String baseUrl;
 
     @Transactional
     public MessageBody register(RegisterInput request, HttpServletRequest servletRequest) {
@@ -91,7 +78,7 @@ public class AuthService {
             throw e;
         }
 
-        sendVerificationLink(email, request.getFirstName().strip(), request.getLastName().strip(),
+        authMailService.sendVerificationLink(email, request.getFirstName().strip(), request.getLastName().strip(),
                 request.getUsername().strip(), "Email Verification", "mail/verification", servletRequest);
 
         return new MessageBody("An email has been sent to verify your account");
@@ -121,7 +108,7 @@ public class AuthService {
 
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
             logHostEvent(host, "LOGIN_SUCCESS : verification link sent", EventLogStatus.APPROVED);
-            sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
+            authMailService.sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
                     jUser.getUsername(), "Login Verification", "mail/login-verification", servletRequest);
             return new MessageBody("A verification link has been sent to your email");
         }
@@ -133,14 +120,14 @@ public class AuthService {
             jUser.setStatus(UserStatus.LOCKED);
             authRepository.save(jUser);
             logHostEvent(host, "ACCOUNT_LOCKED : repeated failed login attempts", EventLogStatus.SECURITY);
-            sendAccountLockedNotification(jUser, servletRequest);
+            authMailService.sendAccountLockedNotification(jUser.getEmail(), jUser.getFirstName(), servletRequest);
             throw new ForbiddenException("Account has been locked due to multiple failed logins");
         }
 
         throw new UnauthorizedException(String.format("Invalid credentials. %s attempt(s) left", MAX_FAILED_LOGIN_ATTEMPTS - failedCount));
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
     public MessageBody changePassword(ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
         String userId = SecurityContextHolder.getContext().getAuthentication().getName();
         JUser jUser = authRepository.findById(UUID.fromString(userId))
@@ -175,11 +162,7 @@ public class AuthService {
         authRepository.save(jUser);
         logHostEvent(userHost, "PASSWORD_CHANGE_SUCCEEDED", EventLogStatus.APPROVED);
 
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("firstName", jUser.getFirstName());
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(jUser.getEmail(), "Password Changed", "mail/password-change", variables));
+        authMailService.sendPasswordChangedNotification(jUser.getEmail(), jUser.getFirstName(), servletRequest);
 
         return new MessageBody("Password changed successfully");
     }
@@ -211,7 +194,7 @@ public class AuthService {
                 throw new ConflictException("Cannot use this email");
             }
 
-            sendChangeEmailConfirmation(jUser, normalizedNewEmail, servletRequest);
+            authMailService.sendChangeEmailConfirmation(jUser.getEmail(), jUser.getFirstName(), normalizedNewEmail, servletRequest);
 
             logHostEvent(userHost, "EMAIL_CHANGE_PENDING : confirmation sent to new address", EventLogStatus.INFO);
             return new MessageBody("A verification link has been sent to your new email address");
@@ -234,7 +217,7 @@ public class AuthService {
             throw new ForbiddenException("Account not locked");
         }
 
-        sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
+        authMailService.sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
                 jUser.getUsername(), "Account Unlock", "mail/unlock-account", servletRequest);
 
         logHostEvent(userHost, "UNLOCK_REQUESTED : verification email sent", EventLogStatus.INFO);
@@ -258,7 +241,7 @@ public class AuthService {
             authRepository.save(jUser);
             logHostEvent(host, "REGISTRATION_VERIFIED", EventLogStatus.APPROVED);
         }
-            
+
         if (jUser.getStatus() == UserStatus.LOCKED) {
             jUser.setStatus(UserStatus.ACTIVE);
             authRepository.save(jUser);
@@ -295,58 +278,10 @@ public class AuthService {
             throw new ForbiddenException("No pending verification");
         }
 
-        sendVerificationLink(normalizedEmail, jUser.getFirstName(), jUser.getLastName(),
+        authMailService.sendVerificationLink(normalizedEmail, jUser.getFirstName(), jUser.getLastName(),
                 jUser.getUsername(), "Email Verification", "mail/verification", servletRequest);
 
         return new MessageBody("A verification link has been sent to your email");
-    }
-
-    private void sendVerificationLink(String email, String firstName, String lastName,
-            String username, String subject, String template, HttpServletRequest servletRequest) {
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(email, token);
-
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
-
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("verificationUrl", verificationUrl);
-        variables.put("firstName", firstName);
-        variables.put("lastName", lastName);
-        variables.put("username", username);
-        variables.put("email", email);
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(email, subject, template, variables));
-    }
-
-    private void sendAccountLockedNotification(JUser jUser, HttpServletRequest servletRequest) {
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(jUser.getEmail(), token);
-        String unlockUrl = String.format("%s/auth/verification/%s", baseUrl, token);
-
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("firstName", jUser.getFirstName());
-        variables.put("unlockUrl", unlockUrl);
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables));
-    }
-
-    private void sendChangeEmailConfirmation(JUser jUser, String newEmail, HttpServletRequest servletRequest) {
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(jUser.getEmail(), token);
-        verificationCodeStore.savePendingEmail(token, newEmail);
-
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
-
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("verificationUrl", verificationUrl);
-        variables.put("firstName", jUser.getFirstName());
-        variables.put("email", newEmail);
-        variables.put("oldEmail", jUser.getEmail());
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(newEmail, "Confirm your new email address", "mail/change-email", variables));
     }
 
     private JHost recordHostAndCheckBan(JUser user, HttpServletRequest servletRequest) {
@@ -375,22 +310,5 @@ public class AuthService {
                 .status(status)
                 .build();
         logRepository.save(logEntry);
-    }
-
-    private void addClientData(Map<String, Object> variables, HttpServletRequest request) {
-        String clientIp = geoIpService.extractClientIp(request);
-        String userAgent = request.getHeader("User-Agent");
-
-        variables.put("clientIp", clientIp);
-        variables.put("userAgent", userAgent != null ? userAgent : "Unknown");
-        variables.put("time", REGISTERED_AT_FORMAT.format(Instant.now()));
-
-        GeoIpResponse geo = geoIpService.resolveGeoData(request);
-        variables.put("city", geo != null && geo.city() != null ? geo.city() : "N/A");
-        variables.put("country", geo != null && geo.country() != null ? geo.country() : "N/A");
-        variables.put("countryCode", geo != null && geo.countryCode() != null ? geo.countryCode() : "N/A");
-        variables.put("timezone", geo != null && geo.timezone() != null ? geo.timezone() : "N/A");
-        variables.put("latitude", geo != null && geo.latitude() != null ? String.format("%.6f", geo.latitude()) : "N/A");
-        variables.put("longitude", geo != null && geo.longitude() != null ? String.format("%.6f", geo.longitude()) : "N/A");
     }
 }
