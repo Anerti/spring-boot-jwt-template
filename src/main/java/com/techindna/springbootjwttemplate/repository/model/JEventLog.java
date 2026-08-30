@@ -1,6 +1,9 @@
 package com.techindna.springbootjwttemplate.repository.model;
 
+import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -30,6 +33,11 @@ public class JEventLog {
 
     @Column(name = "description", length = 100)
     private String description;
+
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false)
+    @Builder.Default
+    private EventLogStatus status = EventLogStatus.INFO;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
