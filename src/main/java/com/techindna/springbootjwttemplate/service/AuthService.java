@@ -21,7 +21,6 @@ import com.techindna.springbootjwttemplate.repository.LogRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JEventLog;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
-import com.techindna.springbootjwttemplate.security.ResourcesAccessRules;
 import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
@@ -48,7 +47,7 @@ public class AuthService {
     private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
 
     private final AuthRepository authRepository;
-    private final ResourcesAccessRules resourcesAccessRules;
+    private final ABACRulesService abacRulesService;
     private final UserMapper userMapper;
     private final AuthValidator authValidator;
     private final DataValidator dataValidator;
@@ -135,7 +134,7 @@ public class AuthService {
         JUser jUser = authRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
-        resourcesAccessRules.enforceIpBinding(auth, servletRequest);
+        abacRulesService.enforceIpBinding(auth, servletRequest);
         JHost userHost = recordHostAndCheckBan(jUser, servletRequest);
 
         if (UserStatus.LOCKED == jUser.getStatus()) {
@@ -175,7 +174,7 @@ public class AuthService {
         JUser jUser = authRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
-        resourcesAccessRules.enforceIpBinding(auth, servletRequest);
+        abacRulesService.enforceIpBinding(auth, servletRequest);
         JHost userHost = recordHostAndCheckBan(jUser, servletRequest);
 
         if (UserStatus.LOCKED == jUser.getStatus()) {
