@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -28,6 +29,12 @@ public class HostService {
     private final DataValidator dataValidator;
     private final ABACRulesService abacRulesService;
 
+    @Value("${app.pagination.default-page:1}")
+    private int defaultPage;
+
+    @Value("${app.pagination.default-size:20}")
+    private int defaultSize;
+
     @Transactional(readOnly = true)
     public PaginatedResponse<Host> listHosts(
             UUID userId,
@@ -40,8 +47,12 @@ public class HostService {
         abacRulesService.grantAccessFor(userId, request);
         dataValidator.validateIpAddress(query.ipAddress());
 
-        page = Math.min(page, 1);
-        size = (size < 1 || size > 100) ? 20 : size;
+        if (page < 1) {
+            page = defaultPage;
+        }
+        if (size < 1 || size > 100) {
+            size = defaultSize;
+        }
 
         Sort sort = Sort.by(
                 "asc".equalsIgnoreCase(sortByLastSeenAt) ? Sort.Direction.ASC : Sort.Direction.DESC,
