@@ -1023,7 +1023,13 @@ paths:
     get:
       operationId: listHosts
       summary: List hosts (paginated)
-      description: Returns a paginated list of host records visible to the authenticated caller. Any authenticated user can call this endpoint, but without an explicit filter the list is scoped to the caller's own hosts — a non-admin caller cannot see another user's hosts.
+      description: >-
+        Returns a paginated list of host records visible to the authenticated caller.
+        Access is governed by ABAC rules: a caller can list hosts for their own user
+        account, or an ADMIN can list hosts belonging to a CUSTOMER — but ADMIN→ADMIN
+        access is denied. A non-admin caller cannot see another user's hosts. IP binding
+        is also enforced: if the JWT carries an ip_address claim, the current request IP
+        must match.
       tags: [Hosts]
       security:
         - bearerAuth: []
@@ -1041,7 +1047,7 @@ paths:
           schema:
             type: string
             maxLength: 255
-          description: Filter by IP address (partial match)
+          description: Filter by IP address (case-insensitive partial match)
         - name: status
           in: query
           required: false
@@ -1073,7 +1079,7 @@ paths:
           description: Sort hosts by last_seen_at (asc or desc, default desc)
       responses:
         '200':
-          description: Paginated host list
+          description: Paginated host list. The data array is null when no hosts match the filters.
           content:
             application/json:
               schema:
@@ -1108,16 +1114,26 @@ paths:
                 message: Insufficient privileges to access the requested hosts
                 timestamp: 2026-07-20T15:00:00Z
         '422':
-          description: Business rule violation
+          description: Business rule violation — invalid query parameter values
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 422
-                error: Unprocessable Entity
-                message: Page size must be between 1 and 100
-                timestamp: 2026-07-20T15:00:00Z
+              examples:
+                invalidPageSize:
+                  summary: Page size out of bounds
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: Page size must be between 1 and 100
+                    timestamp: 2026-07-20T15:00:00Z
+                invalidIpAddress:
+                  summary: IP address format invalid
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: IP address <value> is not valid
+                    timestamp: 2026-07-20T15:00:00Z
 
   /users/{userId}/hosts/{hostId}:
     get:
@@ -1269,8 +1285,8 @@ components:
 
     HostStatus:
       type: string
-      enum: [authorized, banned]
-      description: Host status — new hosts default to authorized; the only transition exposed through the API is to banned, via PATCH /users/{userId}/hosts/{hostId}.
+      enum: [AUTHORIZED, BANNED]
+      description: Host status — new hosts default to AUTHORIZED; the only transition exposed through the API is to BANNED, via PATCH /users/{userId}/hosts/{hostId}.
 
     # ── Auth ──
     RegisterInput:
@@ -1437,7 +1453,7 @@ components:
       example:
         id: 550e8400-e29b-41d4-a716-446655440000
         ipAddress: 203.0.113.42
-        hostStatus: authorized
+        hostStatus: AUTHORIZED
         lastSeenAt: 2026-07-20T14:00:00Z
         updatedAt: null
 
@@ -1447,10 +1463,10 @@ components:
       properties:
         status:
           type: string
-          enum: [banned]
-          description: The only value accepted by the API — sets the host status to banned
+          enum: [BANNED]
+          description: The only value accepted by the API — sets the host status to BANNED
       example:
-        status: banned
+        status: BANNED
 
     # ── Update input ──
     UpdateUserInput:
@@ -1705,7 +1721,7 @@ components:
       example:
         id: 550e8400-e29b-41d4-a716-446655440000
         ipAddress: 203.0.113.42
-        hostStatus: authorized
+        hostStatus: AUTHORIZED
         lastSeenAt: 2026-07-20T14:00:00Z
         updatedAt: null
         city: Mountain View
@@ -1785,7 +1801,7 @@ components:
         host:
           id: 550e8400-e29b-41d4-a716-446655440000
           ipAddress: 203.0.113.42
-          hostStatus: authorized
+          hostStatus: AUTHORIZED
           lastSeenAt: 2026-07-20T14:00:00Z
         userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
         eventLogStatus: security
