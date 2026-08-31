@@ -133,9 +133,9 @@ src/main/resources/
 | POST   | /auth/change-email             | JWT  | Request email change → 202                                                                     |
 | POST   | /auth/unlock                   | —    | Recovery: unlock a LOCKED account → 202                                                       |
 | POST   | /auth/logout                   | JWT  | Revoke current token (logout) → 200                                                           |
-| GET    | /hosts                         | JWT  | List hosts (paginated). Non-admin see own hosts only *(spec'd, not yet implemented)*         |
-| GET    | /hosts/{hostId}                | JWT  | Get host by ID with GeoIP data *(spec'd, not yet implemented)*                              |
-| PATCH  | /hosts/{hostId}                | JWT  | Ban a host *(spec'd, not yet implemented)*                                                   |
+| GET    | /users/{userId}/hosts          | JWT  | List hosts (paginated). Non-admin callers see only their own hosts                         |
+| GET    | /users/{userId}/hosts/{hostId} | JWT  | Get host by ID with GeoIP data *(spec'd, not yet implemented)*                              |
+| PATCH  | /users/{userId}/hosts/{hostId} | JWT  | Ban a host *(spec'd, not yet implemented)*                                                   |
 | GET    | /geoip                         | —    | Resolve client geolocation (X-Forwarded-For)                                                 |
 | GET    | /geoip/{ip}                    | —    | Resolve IP geolocation (IPv4/IPv6)                                                           |
 | GET    | /users                         | JWT  | List users (paginated, admin only)                                                          |
@@ -239,7 +239,7 @@ JAVA_HOME=$HOME/.jdks/openjdk-26.0.2.1 ./gradlew bootRun
 - `/users/**`, `/hosts/**` → `authenticated()`
 - Unauthenticated → 401, unauthorized → 403
 
-### Fine-grained access control (`ResourcesAccessRules`)
+### Fine-grained access control (`ABACRulesService`)
 Injected into services, called before operations. Rules:
 - **Self-access**: requesterId == targetId
 - **ADMIN → CUSTOMER**: admin can access customer resources
@@ -284,7 +284,7 @@ All verification flows consume tokens via the same `GET /auth/verification/{toke
 - **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
 - **JWT auth**: claim-based — extract `userId` + `role` + `ip_address` from token, no `UserDetailsService`
 - **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
-- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor(targetId, targetRole, request)` before operations and `enforceIpBinding(auth, request)` on JWT endpoints. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
+- **Resources access**: `ABACRulesService` — inject, call `grantAccessFor(targetId, targetRole, request)` before operations and `enforceIpBinding(auth, request)` on JWT endpoints. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
 - **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`, `/geoip`)
 - **GeoIP**: MaxMind MMDB — either `classpath:geoip/GeoLite2-City.mmdb` (bundled) or `file:/mnt/geoip/GeoLite2-City.mmdb` (NFS-mounted). Update manually — re-download from MaxMind and replace.
