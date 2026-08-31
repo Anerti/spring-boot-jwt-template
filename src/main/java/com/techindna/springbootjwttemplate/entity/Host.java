@@ -8,9 +8,8 @@ public record Host(
     UUID id,
     UUID userId,
     String ipAddress,
-    String userAgent,
     HostStatus status,
     String description,
-    Instant createdAt,
+    Instant lastSeenAt,
     Instant updatedAt
 ) {}

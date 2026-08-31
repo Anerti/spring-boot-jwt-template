@@ -7,6 +7,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS jwt_template_app.event_log (
         id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
         host_id    UUID        NOT NULL,
+        user_agent VARCHAR(512) NOT NULL,
         status     jwt_template_app.event_log_status NOT NULL DEFAULT 'INFO',
         description VARCHAR(100),
         created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),

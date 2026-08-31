@@ -21,7 +21,7 @@ com.techindna.springbootjwttemplate
 │       ├── JwtAuthenticationFilter.java   # JWT filter (extracts userId + role + ip from claims, no UserDetailsService)
 │       └── JwtTokenProvider.java          # JWT create/parse (HMAC-SHA, BASE64 secret, configurable TTL)
 ├── controller/
-│   ├── AuthController.java               # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link, POST /auth/change-password, POST /auth/change-email, POST /auth/unlock
+│   ├── AuthController.java               # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link, POST /auth/change-password, POST /auth/change-email, POST /auth/unlock, POST /auth/logout
 │   ├── GeoIpController.java              # GET /geoip, GET /geoip/{ip}
 │   ├── SynController.java                # GET /syn
 │   └── UserController.java               # GET/PATCH/DELETE /users/{userId}
@@ -132,6 +132,7 @@ src/main/resources/
 | POST   | /auth/change-password          | JWT  | Request password change → 202                                                                 |
 | POST   | /auth/change-email             | JWT  | Request email change → 202                                                                     |
 | POST   | /auth/unlock                   | —    | Recovery: unlock a LOCKED account → 202                                                       |
+| POST   | /auth/logout                   | JWT  | Revoke current token (logout) → 200                                                           |
 | GET    | /hosts                         | JWT  | List hosts (paginated). Non-admin see own hosts only *(spec'd, not yet implemented)*         |
 | GET    | /hosts/{hostId}                | JWT  | Get host by ID with GeoIP data *(spec'd, not yet implemented)*                              |
 | PATCH  | /hosts/{hostId}                | JWT  | Ban a host *(spec'd, not yet implemented)*                                                   |
@@ -245,6 +246,9 @@ Injected into services, called before operations. Rules:
 - **ADMIN → ADMIN**: denied
 - **CUSTOMER → anything else**: denied
 - **IP binding**: if JWT carries `ip_address` claim, current request IP must match. Mismatch → 403 `Session IP does not match current request`
+
+### Logout (token revocation)
+`POST /auth/logout` (JWT) adds the caller's current token to a Redis blacklist (TTL = remaining token lifetime). `JwtAuthenticationFilter` rejects blacklisted tokens, so the token becomes unusable immediately and the revocation lapses when the token would have expired. The client should discard the token after a successful response.
 
 ### Failed login tracking & account lockout
 `FailedLoginTracker` (Redis): counts failed attempts per userId, key `failed_logins:{userId}`, TTL 12h. After **5 failed attempts** the account status is set to `LOCKED` (`UserStatus.LOCKED`) and login is rejected with 403 `Account locked`. On the 5th failure a notification email is sent via `AuthMailService.sendAccountLockedNotification()` using the `account-locked` template.

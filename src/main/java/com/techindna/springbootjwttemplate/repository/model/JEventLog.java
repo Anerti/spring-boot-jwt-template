@@ -31,6 +31,9 @@ public class JEventLog {
     @JoinColumn(name = "host_id", nullable = false)
     private JHost host;
 
+    @Column(name = "user_agent", nullable = false, length = 512)
+    private String userAgent;
+
     @Column(name = "description", length = 100)
     private String description;
 
