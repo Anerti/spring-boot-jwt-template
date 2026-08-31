@@ -61,7 +61,16 @@ public class DataValidator {
     }
 
     public boolean isValidAddressFormat(String ip) {
-        return ip == null || ip.isBlank() || IP_ADDRESS.matcher(ip).matches();
+        if (ip == null || ip.isBlank()) {
+            return false;
+        }
+
+        try {
+            InetAddress address = InetAddress.getByName(ip);
+            return address.getHostAddress().equals(ip) || address.getHostName().equals(ip);
+        } catch (UnknownHostException e) {
+            return false;
+        }
     }
 
     public void checkPasswordSecurityLevel(String password) {
