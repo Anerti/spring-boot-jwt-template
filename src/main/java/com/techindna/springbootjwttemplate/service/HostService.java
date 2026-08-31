@@ -29,10 +29,10 @@ public class HostService {
     private final DataValidator dataValidator;
     private final ABACRulesService abacRulesService;
 
-    @Value("${app.pagination.default-page:1}")
+    @Value("${app.pagination.default-page}")
     private int defaultPage;
 
-    @Value("${app.pagination.default-size:20}")
+    @Value("${app.pagination.default-size}")
     private int defaultSize;
 
     @Transactional(readOnly = true)
@@ -46,12 +46,8 @@ public class HostService {
         abacRulesService.grantAccessFor(userId, request);
         dataValidator.validateIpAddress(query.ipAddress());
 
-        if (page < 1) {
-            page = defaultPage;
-        }
-        if (size < 1 || size > 100) {
-            size = defaultSize;
-        }
+        page = page < 1 ? defaultPage : page;
+        size = (size < 1 || size > 100) ? defaultSize : size;
 
         String sortByLastSeenAt = query.sortByLastSeenAt() != null ? query.sortByLastSeenAt() : "desc";
 
