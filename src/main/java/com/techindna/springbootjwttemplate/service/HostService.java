@@ -41,7 +41,6 @@ public class HostService {
             HostListQuery query,
             int page,
             int size,
-            String sortByLastSeenAt,
             HttpServletRequest request) {
 
         abacRulesService.grantAccessFor(userId, request);
@@ -53,6 +52,8 @@ public class HostService {
         if (size < 1 || size > 100) {
             size = defaultSize;
         }
+
+        String sortByLastSeenAt = query.sortByLastSeenAt() != null ? query.sortByLastSeenAt() : "desc";
 
         Sort sort = Sort.by(
                 "asc".equalsIgnoreCase(sortByLastSeenAt) ? Sort.Direction.ASC : Sort.Direction.DESC,
