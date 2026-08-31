@@ -29,8 +29,7 @@ public class HostController {
             @RequestParam(defaultValue = "${app.pagination.default-page}") int page,
             @RequestParam(defaultValue = "${app.pagination.default-size}") int size,
             HttpServletRequest request) {
-        PaginatedResponse<Host> body = hostService.listHosts(
-                userId, query, page, size, request);
-        return ResponseEntity.status(HttpStatus.OK).body(body);
+        return ResponseEntity.status(HttpStatus.OK).body(hostService.listHosts(
+                userId, query, page, size, request));
     }
 }

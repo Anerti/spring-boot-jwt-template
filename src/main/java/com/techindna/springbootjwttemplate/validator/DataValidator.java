@@ -60,6 +60,10 @@ public class DataValidator {
         }
     }
 
+    public boolean isValidAddressFormat(String ip) {
+        return ip == null || ip.isBlank() || IP_ADDRESS.matcher(ip).matches();
+    }
+
     public void checkPasswordSecurityLevel(String password) {
         checkNullData("password", password);
 
