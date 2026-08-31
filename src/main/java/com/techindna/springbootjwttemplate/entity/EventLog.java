@@ -7,6 +7,7 @@ import java.util.UUID;
 public record EventLog(
     UUID id,
     UUID hostId,
+    String userAgent,
     EventLogStatus status,
     String description,
     Instant createdAt

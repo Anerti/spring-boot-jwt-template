@@ -36,9 +36,6 @@ public class JHost {
     @Column(name = "ip_address", nullable = false, length = 255)
     private String ipAddress;
 
-    @Column(name = "user_agent", nullable = false, length = 512)
-    private String userAgent;
-
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false)
     @Builder.Default
