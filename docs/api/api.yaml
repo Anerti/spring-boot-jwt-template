@@ -866,18 +866,11 @@ paths:
     get:
       operationId: listHosts
       summary: List hosts (paginated)
-      description: Returns a paginated list of host records visible to the authenticated caller. Any authenticated user can call this endpoint, but without an explicit userId filter the list is scoped to the caller's own hosts — a non-admin caller cannot see another user's hosts. When userId is provided the caller must be an admin or the owner of the targeted user; otherwise the request is rejected.
+      description: Returns a paginated list of host records visible to the authenticated caller. Any authenticated user can call this endpoint, but without an explicit filter the list is scoped to the caller's own hosts — a non-admin caller cannot see another user's hosts.
       tags: [Hosts]
       security:
         - bearerAuth: []
       parameters:
-        - name: userId
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
-          description: Filter by owner user ID
         - name: ipAddress
           in: query
           required: false
@@ -885,20 +878,12 @@ paths:
             type: string
             maxLength: 255
           description: Filter by IP address (partial match)
-        - name: userAgent
+        - name: status
           in: query
           required: false
           schema:
-            type: string
-            maxLength: 512
-          description: Filter by user agent string (partial match)
-        - name: loginFailed
-          in: query
-          required: false
-          schema:
-            type: boolean
-            default: false
-          description: Filter by login-failed flag. When omitted or false, returns hosts with no failed login recorded; when true, returns hosts with a failed login attempt.
+            $ref: '#/components/schemas/HostStatus'
+          description: Filter by host status
         - name: page
           in: query
           schema:
@@ -914,6 +899,14 @@ paths:
             minimum: 1
             maximum: 100
           description: Page size
+        - name: sortByLastSeenAt
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort hosts by last_seen_at (asc or desc, default desc)
       responses:
         '200':
           description: Paginated host list
@@ -966,7 +959,7 @@ paths:
     get:
       operationId: getHost
       summary: Get a host by ID
-      description: Returns a single host record by its ID, including geolocation data for its IP. Any authenticated user can call this endpoint, but a non-admin caller can only retrieve hosts they own — attempting to access another user's host is rejected.
+      description: Returns a single host record by its ID. Any authenticated user can call this endpoint, but a non-admin caller can only retrieve hosts they own — attempting to access another user's host is rejected.
       tags: [Hosts]
       security:
         - bearerAuth: []
@@ -979,11 +972,11 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Host record with geolocation data for its IP
+          description: Host record
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Host'
+                $ref: '#/components/schemas/HostDetailResponse'
         '401':
           description: Missing or invalid authentication token
           content:
@@ -1044,7 +1037,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Host'
+                $ref: '#/components/schemas/HostDetailResponse'
         '401':
           description: Missing or invalid authentication token
           content:
@@ -1246,63 +1239,16 @@ components:
     # ── Hosts ──
     Host:
       type: object
-      required: [id, userId, ipAddress, userAgent, hostStatus, lastSeenAt]
+      required: [id, ipAddress, hostStatus, lastSeenAt]
       properties:
         id:
           type: string
           format: uuid
-        userId:
-          type: string
-          format: uuid
-          description: Owner user ID
         ipAddress:
           type: string
           maxLength: 255
-        userAgent:
-          type: string
-          maxLength: 512
         hostStatus:
           $ref: '#/components/schemas/HostStatus'
-        loginFailed:
-          type: boolean
-          description: Whether the host has a failed login attempt recorded
-        geo:
-          type: object
-          description: Geolocation data for the host's IP address (derived from the GeoIP service)
-          properties:
-            city:
-              type: string
-              nullable: true
-            country:
-              type: string
-              nullable: true
-            countryCode:
-              type: string
-              nullable: true
-            continent:
-              type: string
-              nullable: true
-            subdivision:
-              type: string
-              nullable: true
-            postalCode:
-              type: string
-              nullable: true
-            timezone:
-              type: string
-              nullable: true
-            latitude:
-              type: number
-              format: double
-              nullable: true
-            longitude:
-              type: number
-              format: double
-              nullable: true
-        description:
-          type: string
-          maxLength: 100
-          nullable: true
         lastSeenAt:
           type: string
           format: date-time
@@ -1312,23 +1258,9 @@ components:
           nullable: true
       example:
         id: 550e8400-e29b-41d4-a716-446655440000
-        userId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
         ipAddress: 203.0.113.42
-        userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
-        hostStatus: active
-        loginFailed: false
-        geo:
-          city: Mountain View
-          country: United States
-          countryCode: US
-          continent: North America
-          subdivision: California
-          postalCode: 94043
-          timezone: America/Los_Angeles
-          latitude: 37.386
-          longitude: -122.084
-        description: Office workstation
-        createdAt: 2026-07-20T14:00:00Z
+        hostStatus: authorized
+        lastSeenAt: 2026-07-20T14:00:00Z
         updatedAt: null
 
     BanHostInput:
@@ -1543,36 +1475,70 @@ components:
         latitude: 37.386
         longitude: -122.084
 
-    # ── Host detail (host + geo) ──
+    # ── Host detail (geo fields merged inline) ──
     HostDetailResponse:
       type: object
-      required: [host, geo]
+      required: [id, ipAddress, hostStatus, lastSeenAt]
       properties:
-        host:
-          $ref: '#/components/schemas/Host'
-        geo:
-          $ref: '#/components/schemas/HostGeoIpResponse'
+        id:
+          type: string
+          format: uuid
+        ipAddress:
+          type: string
+          maxLength: 255
+        hostStatus:
+          $ref: '#/components/schemas/HostStatus'
+        lastSeenAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        countryCode:
+          type: string
+          nullable: true
+        continent:
+          type: string
+          nullable: true
+        subdivision:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+          nullable: true
+        longitude:
+          type: number
+          format: double
+          nullable: true
       example:
-        host:
-          id: 550e8400-e29b-41d4-a716-446655440000
-          userId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-          ipAddress: 203.0.113.42
-          userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
-          hostStatus: authorized
-          loginFailed: false
-          description: Office workstation
-          lastSeenAt: 2026-07-20T14:00:00Z
-          updatedAt: null
-        geo:
-          city: Mountain View
-          country: United States
-          countryCode: US
-          continent: North America
-          subdivision: California
-          postalCode: 94043
-          timezone: America/Los_Angeles
-          latitude: 37.386
-          longitude: -122.084
+        id: 550e8400-e29b-41d4-a716-446655440000
+        ipAddress: 203.0.113.42
+        hostStatus: authorized
+        lastSeenAt: 2026-07-20T14:00:00Z
+        updatedAt: null
+        city: Mountain View
+        country: United States
+        countryCode: US
+        continent: North America
+        subdivision: California
+        postalCode: 94043
+        timezone: America/Los_Angeles
+        latitude: 37.386
+        longitude: -122.084
 
     Meta:
       type: object
