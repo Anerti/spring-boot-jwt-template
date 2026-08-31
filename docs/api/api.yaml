@@ -1019,7 +1019,7 @@ paths:
                 timestamp: 2026-07-20T15:00:00Z
 
   # ──────────────── Hosts ────────────────
-  /hosts:
+  /users/{userId}/hosts:
     get:
       operationId: listHosts
       summary: List hosts (paginated)
@@ -1028,6 +1028,13 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the user whose hosts to list
         - name: ipAddress
           in: query
           required: false
@@ -1112,7 +1119,7 @@ paths:
                 message: Page size must be between 1 and 100
                 timestamp: 2026-07-20T15:00:00Z
 
-  /hosts/{hostId}:
+  /users/{userId}/hosts/{hostId}:
     get:
       operationId: getHost
       summary: Get a host by ID
@@ -1121,6 +1128,13 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the user who owns the host
         - name: hostId
           in: path
           required: true
@@ -1176,6 +1190,13 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the user who owns the host
         - name: hostId
           in: path
           required: true
@@ -1249,7 +1270,7 @@ components:
     HostStatus:
       type: string
       enum: [authorized, banned]
-      description: Host status — new hosts default to authorized; the only transition exposed through the API is to banned, via PATCH /hosts/{hostId}.
+      description: Host status — new hosts default to authorized; the only transition exposed through the API is to banned, via PATCH /users/{userId}/hosts/{hostId}.
 
     # ── Auth ──
     RegisterInput:
