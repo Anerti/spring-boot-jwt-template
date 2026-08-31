@@ -31,6 +31,8 @@ import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
 import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.time.Instant;
 import java.util.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -286,12 +288,12 @@ public class AuthService {
 
     private JHost recordHostAndCheckBan(JUser user, HttpServletRequest servletRequest) {
         String ipAddress = geoIpService.extractClientIp(servletRequest);
-
-        // host status unreliable
+        
         JHost host = hostRepository.findByIpAddressAndUser_Id(ipAddress, user.getId())
                 .orElseGet(() -> JHost.builder()
                         .user(user)
                         .ipAddress(ipAddress)
+                        .lastSeenAt(Instant.now())
                         .build());
 
         if (host.getStatus() == HostStatus.BANNED) {

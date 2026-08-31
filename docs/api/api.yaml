@@ -987,7 +987,7 @@ paths:
     patch:
       operationId: banHost
       summary: Ban a host
-      description: Sets the host status to banned. This is the only status transition exposed through the API — use it to revoke a host's access, for example after repeated failed login attempts. The status cannot be changed back to active or inactive through this endpoint.
+      description: Sets the host status to banned. This is the only status transition exposed through the API — use it to revoke a host's access, for example after repeated failed login attempts. The status cannot be changed back to authorized through this endpoint.
       tags: [Hosts]
       security:
         - bearerAuth: []
@@ -1064,8 +1064,8 @@ components:
 
     HostStatus:
       type: string
-      enum: [active, inactive, banned]
-      description: Host status — the only status transition through the API is to banned, via PATCH /hosts/{hostId}.
+      enum: [authorized, banned]
+      description: Host status — new hosts default to authorized; the only transition exposed through the API is to banned, via PATCH /hosts/{hostId}.
 
     # ── Auth ──
     RegisterInput:
@@ -1212,7 +1212,7 @@ components:
     # ── Hosts ──
     Host:
       type: object
-      required: [id, userId, ipAddress, userAgent, hostStatus, createdAt]
+      required: [id, userId, ipAddress, userAgent, hostStatus, lastSeenAt]
       properties:
         id:
           type: string
@@ -1269,7 +1269,7 @@ components:
           type: string
           maxLength: 100
           nullable: true
-        createdAt:
+        lastSeenAt:
           type: string
           format: date-time
         updatedAt:
@@ -1524,10 +1524,10 @@ components:
           userId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
           ipAddress: 203.0.113.42
           userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
-          hostStatus: active
+          hostStatus: authorized
           loginFailed: false
           description: Office workstation
-          createdAt: 2026-07-20T14:00:00Z
+          lastSeenAt: 2026-07-20T14:00:00Z
           updatedAt: null
         geo:
           city: Mountain View

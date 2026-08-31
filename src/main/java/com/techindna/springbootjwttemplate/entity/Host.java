@@ -10,6 +10,6 @@ public record Host(
     String ipAddress,
     HostStatus status,
     String description,
-    Instant createdAt,
+    Instant lastSeenAt,
     Instant updatedAt
 ) {}
