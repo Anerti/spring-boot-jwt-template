@@ -7,7 +7,6 @@ import com.techindna.springbootjwttemplate.service.HostService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,18 +22,12 @@ public class HostController {
 
     private final HostService hostService;
 
-    @Value("${app.pagination.default-page:1}")
-    private int defaultPage;
-
-    @Value("${app.pagination.default-size:20}")
-    private int defaultSize;
-
     @GetMapping
     public ResponseEntity<PaginatedResponse<Host>> listHosts(
             @PathVariable UUID userId,
             HostListQuery query,
-            @RequestParam(defaultValue = "${app.pagination.default-page:1}") int page,
-            @RequestParam(defaultValue = "${app.pagination.default-size:20}") int size,
+            @RequestParam(defaultValue = "${app.pagination.default-page}") int page,
+            @RequestParam(defaultValue = "${app.pagination.default-size}") int size,
             HttpServletRequest request) {
         PaginatedResponse<Host> body = hostService.listHosts(
                 userId, query, page, size, request);
