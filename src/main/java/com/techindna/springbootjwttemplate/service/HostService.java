@@ -1,0 +1,57 @@
+package com.techindna.springbootjwttemplate.service;
+
+import com.techindna.springbootjwttemplate.dto.Meta;
+import com.techindna.springbootjwttemplate.dto.PaginatedResponse;
+import com.techindna.springbootjwttemplate.entity.Host;
+import com.techindna.springbootjwttemplate.entity.enums.HostStatus;
+import com.techindna.springbootjwttemplate.mapper.HostMapper;
+import com.techindna.springbootjwttemplate.repository.HostRepository;
+import com.techindna.springbootjwttemplate.repository.model.JHost;
+import com.techindna.springbootjwttemplate.validator.DataValidator;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class HostService {
+
+    private final HostRepository hostRepository;
+    private final HostMapper hostMapper;
+    private final DataValidator dataValidator;
+    private final ABACRulesService abacRulesService;
+
+    @Transactional(readOnly = true)
+    public PaginatedResponse<Host> listHosts(
+            UUID userId,
+            String ipAddress,
+            HostStatus status,
+            int page,
+            int size,
+            String sortByLastSeenAt,
+            HttpServletRequest request) {
+
+        abacRulesService.grantAccessFor(userId, request);
+        dataValidator.validateIpAddress(ipAddress);
+
+        page = Math.min(page, 1);
+        size = (size < 1 || size > 100) ? 20 : size;
+
+        Sort sort = Sort.by(
+                "asc".equalsIgnoreCase(sortByLastSeenAt) ? Sort.Direction.ASC : Sort.Direction.DESC,
+                "lastSeenAt");
+        Pageable pageable = PageRequest.of(page - 1, size, sort);
+
+        Page<JHost> resultPage = hostRepository.search(userId, ipAddress, status, pageable);
+        List<Host> data = resultPage.getContent().stream().map(hostMapper::toDomain).toList();
+
+        return new PaginatedResponse<>(data.isEmpty() ? null : data, new Meta(page, size, resultPage.getTotalElements()));
+    }
+}
