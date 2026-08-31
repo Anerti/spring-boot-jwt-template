@@ -1,6 +1,9 @@
 package com.techindna.springbootjwttemplate.dto;
 
+import com.techindna.springbootjwttemplate.entity.enums.HostStatus;
+
 public record HostListQuery(
     String ipAddress,
-    com.techindna.springbootjwttemplate.entity.enums.HostStatus status
+    HostStatus status,
+    String sortByLastSeenAt
 ) {}
