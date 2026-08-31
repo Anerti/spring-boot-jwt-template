@@ -6,10 +6,8 @@ import java.util.UUID;
 
 public record Host(
     UUID id,
-    UUID userId,
     String ipAddress,
-    HostStatus status,
-    String description,
+    HostStatus hostStatus,
     Instant lastSeenAt,
     Instant updatedAt
 ) {}

@@ -217,7 +217,7 @@ Client IP extraction: when `geoip.trust-x-forwarded-for=true`, the first IP in t
 - Unauthenticated requests to protected endpoints → 401 `Authentication required.`
 - Authenticated but unauthorized → 403 `Insufficient privileges.`
 
-### Fine-grained access control (`ResourcesAccessRules`)
+### Fine-grained access control (`ABACRulesService`)
 
 Injected into services, called before operations. Rules:
 - **Self-access**: any authenticated user can access their own resource (requesterId == targetId)
@@ -334,9 +334,9 @@ Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/hosts` | JWT | List hosts (paginated). Non-admin callers see only their own hosts. Filter by userId, ipAddress, userAgent, loginFailed |
-| GET | `/hosts/{hostId}` | JWT | Get a host by ID (includes GeoIP data for its IP). Non-admin callers can only access their own hosts |
-| PATCH | `/hosts/{hostId}` | JWT | Ban a host → sets status to BANNED. Only status transition exposed via API |
+| GET | `/users/{userId}/hosts` | JWT | List hosts (paginated). Non-admin callers see only their own hosts. Filter by ipAddress, status |
+| GET | `/users/{userId}/hosts/{hostId}` | JWT | Get a host by ID (includes GeoIP data for its IP). Non-admin callers can only access their own hosts |
+| PATCH | `/users/{userId}/hosts/{hostId}` | JWT | Ban a host → sets status to BANNED. Only status transition exposed via API |
 
 ### GeoIP
 
@@ -471,7 +471,7 @@ src/main/resources/
 - **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
 - **JWT auth**: claim-based — extract `userId` + `role` + `ip_address` from token, no `UserDetailsService`
 - **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
-- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor()` before operations. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
+- **Resources access**: `ABACRulesService` — inject, call `grantAccessFor()` before operations. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
 - **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`, `/geoip`)
 - **GeoIP**: MaxMind MMDB — either `classpath:geoip/GeoLite2-City.mmdb` (bundled in `src/main/resources/geoip/`) or `file:/mnt/geoip/GeoLite2-City.mmdb` (NFS-mounted from a VPS). Configured via `geoip.database-path` in `.env`/`application.properties`. Update the file manually — re-download from MaxMind and replace it (and for NFS, re-export on the VPS).

@@ -861,44 +861,36 @@ paths:
                 message: User not found
                 timestamp: 2026-07-20T15:00:00Z
 
-  # ──────────────── Hosts ────────────────
-  /hosts:
+  # ──────────────── Event log ────────────────
+  /event-log:
     get:
-      operationId: listHosts
-      summary: List hosts (paginated)
-      description: Returns a paginated list of host records visible to the authenticated caller. Any authenticated user can call this endpoint, but without an explicit userId filter the list is scoped to the caller's own hosts — a non-admin caller cannot see another user's hosts. When userId is provided the caller must be an admin or the owner of the targeted user; otherwise the request is rejected.
-      tags: [Hosts]
+      operationId: listEventLogs
+      summary: List event log records (paginated)
+      description: Returns a paginated list of authentication event log records visible to the authenticated caller. Any authenticated user can call this endpoint, but without an explicit filter the list is scoped to the caller's own hosts — a non-admin caller cannot see event logs belonging to another user's hosts.
+      tags: [EventLog]
       security:
         - bearerAuth: []
       parameters:
-        - name: userId
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/EventLogStatus'
+          description: Filter by event log status
+        - name: startDate
           in: query
           required: false
           schema:
             type: string
-            format: uuid
-          description: Filter by owner user ID
-        - name: ipAddress
+            format: date
+          description: Inclusive lower bound on created_at (YYYY-MM-DD)
+        - name: endDate
           in: query
           required: false
           schema:
             type: string
-            maxLength: 255
-          description: Filter by IP address (partial match)
-        - name: userAgent
-          in: query
-          required: false
-          schema:
-            type: string
-            maxLength: 512
-          description: Filter by user agent string (partial match)
-        - name: loginFailed
-          in: query
-          required: false
-          schema:
-            type: boolean
-            default: false
-          description: Filter by login-failed flag. When omitted or false, returns hosts with no failed login recorded; when true, returns hosts with a failed login attempt.
+            format: date
+          description: Inclusive upper bound on created_at (YYYY-MM-DD)
         - name: page
           in: query
           schema:
@@ -914,9 +906,180 @@ paths:
             minimum: 1
             maximum: 100
           description: Page size
+        - name: sortByCreatedAt
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort event logs by created_at (asc or desc, default desc)
       responses:
         '200':
-          description: Paginated host list
+          description: Paginated event log list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventLog'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to access the requested event logs
+                timestamp: 2026-07-20T15:00:00Z
+        '422':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 422
+                error: Unprocessable Entity
+                message: Page size must be between 1 and 100
+                timestamp: 2026-07-20T15:00:00Z
+
+  /event-log/{eventLogId}:
+    get:
+      operationId: getEventLog
+      summary: Get an event log record by ID
+      description: Returns a single event log record by its ID with full host details. Any authenticated user can call this endpoint, but a non-admin caller can only retrieve event logs belonging to their own hosts — attempting to access another user's event log is rejected.
+      tags: [EventLog]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventLogId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Event log record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventLogDetail'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to access this event log
+                timestamp: 2026-07-20T15:00:00Z
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 404
+                error: Not Found
+                message: Event log not found
+                timestamp: 2026-07-20T15:00:00Z
+
+  # ──────────────── Hosts ────────────────
+  /users/{userId}/hosts:
+    get:
+      operationId: listHosts
+      summary: List hosts (paginated)
+      description: >-
+        Returns a paginated list of host records visible to the authenticated caller.
+        Access is governed by ABAC rules: a caller can list hosts for their own user
+        account, or an ADMIN can list hosts belonging to a CUSTOMER — but ADMIN→ADMIN
+        access is denied. A non-admin caller cannot see another user's hosts. IP binding
+        is also enforced: if the JWT carries an ip_address claim, the current request IP
+        must match.
+      tags: [Hosts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the user whose hosts to list
+        - name: ipAddress
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+          description: Filter by IP address (case-insensitive partial match)
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/HostStatus'
+          description: Filter by host status
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Page number (1-indexed)
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: Page size
+        - name: sortByLastSeenAt
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort hosts by last_seen_at (asc or desc, default desc)
+      responses:
+        '200':
+          description: Paginated host list. The data array is null when no hosts match the filters.
           content:
             application/json:
               schema:
@@ -951,26 +1114,43 @@ paths:
                 message: Insufficient privileges to access the requested hosts
                 timestamp: 2026-07-20T15:00:00Z
         '422':
-          description: Business rule violation
+          description: Business rule violation — invalid query parameter values
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 422
-                error: Unprocessable Entity
-                message: Page size must be between 1 and 100
-                timestamp: 2026-07-20T15:00:00Z
+              examples:
+                invalidPageSize:
+                  summary: Page size out of bounds
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: Page size must be between 1 and 100
+                    timestamp: 2026-07-20T15:00:00Z
+                invalidIpAddress:
+                  summary: IP address format invalid
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: IP address <value> is not valid
+                    timestamp: 2026-07-20T15:00:00Z
 
-  /hosts/{hostId}:
+  /users/{userId}/hosts/{hostId}:
     get:
       operationId: getHost
       summary: Get a host by ID
-      description: Returns a single host record by its ID, including geolocation data for its IP. Any authenticated user can call this endpoint, but a non-admin caller can only retrieve hosts they own — attempting to access another user's host is rejected.
+      description: Returns a single host record by its ID. Any authenticated user can call this endpoint, but a non-admin caller can only retrieve hosts they own — attempting to access another user's host is rejected.
       tags: [Hosts]
       security:
         - bearerAuth: []
       parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the user who owns the host
         - name: hostId
           in: path
           required: true
@@ -979,11 +1159,11 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Host record with geolocation data for its IP
+          description: Host record
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Host'
+                $ref: '#/components/schemas/HostDetailResponse'
         '401':
           description: Missing or invalid authentication token
           content:
@@ -1026,6 +1206,13 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the user who owns the host
         - name: hostId
           in: path
           required: true
@@ -1044,7 +1231,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Host'
+                $ref: '#/components/schemas/HostDetailResponse'
         '401':
           description: Missing or invalid authentication token
           content:
@@ -1098,8 +1285,8 @@ components:
 
     HostStatus:
       type: string
-      enum: [authorized, banned]
-      description: Host status — new hosts default to authorized; the only transition exposed through the API is to banned, via PATCH /hosts/{hostId}.
+      enum: [AUTHORIZED, BANNED]
+      description: Host status — new hosts default to AUTHORIZED; the only transition exposed through the API is to BANNED, via PATCH /users/{userId}/hosts/{hostId}.
 
     # ── Auth ──
     RegisterInput:
@@ -1246,63 +1433,16 @@ components:
     # ── Hosts ──
     Host:
       type: object
-      required: [id, userId, ipAddress, userAgent, hostStatus, lastSeenAt]
+      required: [id, ipAddress, hostStatus, lastSeenAt]
       properties:
         id:
           type: string
           format: uuid
-        userId:
-          type: string
-          format: uuid
-          description: Owner user ID
         ipAddress:
           type: string
           maxLength: 255
-        userAgent:
-          type: string
-          maxLength: 512
         hostStatus:
           $ref: '#/components/schemas/HostStatus'
-        loginFailed:
-          type: boolean
-          description: Whether the host has a failed login attempt recorded
-        geo:
-          type: object
-          description: Geolocation data for the host's IP address (derived from the GeoIP service)
-          properties:
-            city:
-              type: string
-              nullable: true
-            country:
-              type: string
-              nullable: true
-            countryCode:
-              type: string
-              nullable: true
-            continent:
-              type: string
-              nullable: true
-            subdivision:
-              type: string
-              nullable: true
-            postalCode:
-              type: string
-              nullable: true
-            timezone:
-              type: string
-              nullable: true
-            latitude:
-              type: number
-              format: double
-              nullable: true
-            longitude:
-              type: number
-              format: double
-              nullable: true
-        description:
-          type: string
-          maxLength: 100
-          nullable: true
         lastSeenAt:
           type: string
           format: date-time
@@ -1312,23 +1452,9 @@ components:
           nullable: true
       example:
         id: 550e8400-e29b-41d4-a716-446655440000
-        userId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
         ipAddress: 203.0.113.42
-        userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
-        hostStatus: active
-        loginFailed: false
-        geo:
-          city: Mountain View
-          country: United States
-          countryCode: US
-          continent: North America
-          subdivision: California
-          postalCode: 94043
-          timezone: America/Los_Angeles
-          latitude: 37.386
-          longitude: -122.084
-        description: Office workstation
-        createdAt: 2026-07-20T14:00:00Z
+        hostStatus: AUTHORIZED
+        lastSeenAt: 2026-07-20T14:00:00Z
         updatedAt: null
 
     BanHostInput:
@@ -1337,10 +1463,10 @@ components:
       properties:
         status:
           type: string
-          enum: [banned]
-          description: The only value accepted by the API — sets the host status to banned
+          enum: [BANNED]
+          description: The only value accepted by the API — sets the host status to BANNED
       example:
-        status: banned
+        status: BANNED
 
     # ── Update input ──
     UpdateUserInput:
@@ -1543,36 +1669,144 @@ components:
         latitude: 37.386
         longitude: -122.084
 
-    # ── Host detail (host + geo) ──
+    # ── Host detail (geo fields merged inline) ──
     HostDetailResponse:
       type: object
-      required: [host, geo]
+      required: [id, ipAddress, hostStatus, lastSeenAt]
       properties:
+        id:
+          type: string
+          format: uuid
+        ipAddress:
+          type: string
+          maxLength: 255
+        hostStatus:
+          $ref: '#/components/schemas/HostStatus'
+        lastSeenAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        countryCode:
+          type: string
+          nullable: true
+        continent:
+          type: string
+          nullable: true
+        subdivision:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+          nullable: true
+        longitude:
+          type: number
+          format: double
+          nullable: true
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        ipAddress: 203.0.113.42
+        hostStatus: AUTHORIZED
+        lastSeenAt: 2026-07-20T14:00:00Z
+        updatedAt: null
+        city: Mountain View
+        country: United States
+        countryCode: US
+        continent: North America
+        subdivision: California
+        postalCode: 94043
+        timezone: America/Los_Angeles
+        latitude: 37.386
+        longitude: -122.084
+
+    # ── Event log status ──
+    EventLogStatus:
+      type: string
+      enum: [info, approved, security, warning]
+      description: Event log severity / classification
+
+    # ── Event log record (summary, used in list) ──
+    EventLog:
+      type: object
+      required: [id, hostId, userAgent, eventLogStatus, description, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        hostId:
+          type: string
+          format: uuid
+          description: Host that generated this event
+        userAgent:
+          type: string
+          maxLength: 512
+          description: Client user-agent header at the time of the event
+        eventLogStatus:
+          $ref: '#/components/schemas/EventLogStatus'
+        description:
+          type: string
+          maxLength: 100
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: 9c13e3aa-2e44-4bfc-8dba-1b735c94f4d8
+        hostId: 550e8400-e29b-41d4-a716-446655440000
+        userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+        eventLogStatus: security
+        description: Failed login attempt — account locked
+        createdAt: 2026-07-20T14:05:00Z
+
+    # ── Event log detail (single-record endpoint) ──
+    EventLogDetail:
+      type: object
+      required: [id, host, userAgent, eventLogStatus, description, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
         host:
           $ref: '#/components/schemas/Host'
-        geo:
-          $ref: '#/components/schemas/HostGeoIpResponse'
+        userAgent:
+          type: string
+          maxLength: 512
+          description: Client user-agent header at the time of the event
+        eventLogStatus:
+          $ref: '#/components/schemas/EventLogStatus'
+        description:
+          type: string
+          maxLength: 100
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
       example:
+        id: 9c13e3aa-2e44-4bfc-8dba-1b735c94f4d8
         host:
           id: 550e8400-e29b-41d4-a716-446655440000
-          userId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
           ipAddress: 203.0.113.42
-          userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
-          hostStatus: authorized
-          loginFailed: false
-          description: Office workstation
+          hostStatus: AUTHORIZED
           lastSeenAt: 2026-07-20T14:00:00Z
-          updatedAt: null
-        geo:
-          city: Mountain View
-          country: United States
-          countryCode: US
-          continent: North America
-          subdivision: California
-          postalCode: 94043
-          timezone: America/Los_Angeles
-          latitude: 37.386
-          longitude: -122.084
+        userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+        eventLogStatus: security
+        description: Failed login attempt — account locked
+        createdAt: 2026-07-20T14:05:00Z
 
     Meta:
       type: object

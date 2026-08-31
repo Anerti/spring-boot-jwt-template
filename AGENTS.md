@@ -25,6 +25,7 @@ com.techindna.springbootjwttemplate
 │   ├── GeoIpController.java              # GET /geoip, GET /geoip/{ip}
 │   ├── SynController.java                # GET /syn
 │   └── UserController.java               # GET/PATCH/DELETE /users/{userId}
+│   └── HostController.java               # GET /users/{userId}/hosts
 ├── dto/
 │   ├── LoginInput.java                   # login request body (username/email, password)
 │   ├── RegisterInput.java                # registration request body
@@ -33,7 +34,10 @@ com.techindna.springbootjwttemplate
 │   ├── UnlockAccountInput.java           # unlock request body (email)
 │   ├── UpdateUserInput.java              # user update request body
 │   ├── MessageBody.java                  # { message } response
-│   └── VerifyRegistrationResponse.java   # token + user response
+│   ├── VerifyRegistrationResponse.java   # token + user response
+│   ├── HostListQuery.java                # host list filter + sort params
+│   ├── Meta.java                         # pagination metadata
+│   └── PaginatedResponse.java            # { data, meta } envelope
 ├── entity/
 │   ├── GeoIpResponse.java               # GeoIP lookup result record
 │   ├── User.java                         # domain record (read model)
@@ -43,7 +47,7 @@ com.techindna.springbootjwttemplate
 │   └── enums/
 │       ├── UserRole.java                 # user role enum (ADMIN, CUSTOMER)
 │       ├── UserStatus.java               # account status enum (ACTIVE, INACTIVE, LOCKED)
-│       └── HostStatus.java               # host status enum (ACTIVE, INACTIVE, BANNED)
+│       └── HostStatus.java               # host status enum (AUTHORIZED, BANNED)
 ├── exception/
 │   ├── ErrorBody.java                    # error response DTO (status, error, message, timestamp)
 │   ├── GlobalExceptionHandler.java       # centralized error handling (@RestControllerAdvice)
@@ -57,11 +61,12 @@ com.techindna.springbootjwttemplate
 │       └── UnprocessableContentException.java  # 422
 ├── mapper/
 │   ├── UserMapper.java                   # RegisterInput → JUser, JUser → User
-│   └── GeoIpMapper.java                 # CityResponse → GeoIpResponse
+│   ├── GeoIpMapper.java                 # CityResponse → GeoIpResponse
+│   └── HostMapper.java                  # JHost → Host
 ├── repository/
 │   ├── AuthRepository.java               # JPA repository (findByEmail, findByUsername)
 │   ├── UserRepository.java               # JPA repository (CRUD)
-│   ├── HostRepository.java               # JPA repository (findByIpAddress, findByIpAddressAndUser_Id)
+│   ├── HostRepository.java               # JPA repository (findByIpAddress, findByIpAddressAndUser_Id, search with filters)
 │   ├── LogRepository.java                # JPA repository (event log CRUD)
 │   └── model/
 │       ├── JUser.java                    # JPA entity (PostgreSQL "user" table)
@@ -69,8 +74,10 @@ com.techindna.springbootjwttemplate
 │       └── JEventLog.java                # JPA entity (PostgreSQL "event_log" table)
 ├── service/
 │   ├── AuthService.java                  # register + login + verification + resend + unlock + change-password/email + failed login tracking
-│   ├── UserService.java                  # getUser + updateUser (with ResourcesAccessRules)
+│   ├── UserService.java                  # getUser + updateUser (with ABACRulesService)
+│   ├── HostService.java                  # listHosts (paginated, filtered, ABAC-guarded)
 │   ├── GeoIpService.java                 # IP lookup, client IP extraction
+│   ├── ABACRulesService.java             # grantAccessFor + enforceIpBinding (ABAC: self/ADMIN→CUSTOMER; ADMIN→ADMIN denied)
 │   ├── VerificationCodeStore.java        # Redis-based verification code storage (15 min TTL, key prefix "verification:")
 │   ├── redis/
 │   │   └── FailedLoginTracker.java       # Redis-based failed login counter (12 h TTL, key prefix "failed_logins:"), reset() clears counter
@@ -81,7 +88,8 @@ com.techindna.springbootjwttemplate
 └── validator/
     ├── DataValidator.java                # low-level format checks (email, name, username, password, IP)
     ├── AuthValidator.java                # auth + change-password/email validation rules
-    └── UserValidator.java                # user update validation rules
+    ├── UserValidator.java                # user update validation rules
+    └── HostValidator.java                # host list filter validation (page size bounds)
 
 docs/
 ├── api/api.yaml          # OpenAPI 3.0.3 spec (source of truth for endpoints)
@@ -110,13 +118,13 @@ src/main/resources/
 | Table    | Purpose                                   | Key columns                                                     |
 |----------|-------------------------------------------|-----------------------------------------------------------------|
 | `users`  | User accounts with JWT auth               | `id` (UUID PK), `username`, `email`, `password`, `role`, `status`, `verified` |
-| `host`   | IP address tracking per user              | `id` (UUID PK), `user_id` (FK), `ip_address` (unique), `user_agent`, `status` |
-| `event_log` | Authentication event audit trail       | `id` (UUID PK), `host_id` (FK), `description`, `created_at`    |
+| `host`   | IP address tracking per user              | `id` (UUID PK), `user_id` (FK), `ip_address` (unique), `status`, `last_seen_at`, `updated_at` |
+| `event_log` | Authentication event audit trail       | `id` (UUID PK), `host_id` (FK), `user_agent`, `status`, `description`, `created_at`    |
 
 **Enums:**
 - `user_role`: `ADMIN`, `CUSTOMER`
 - `user_status`: `ACTIVE`, `INACTIVE`, `LOCKED`
-- `host_status`: `ACTIVE`, `INACTIVE`, `BANNED`
+- `host_status`: `AUTHORIZED`, `BANNED`
 
 **Schema**: native PostgreSQL DDL (`V1__init.sql`, `V2__host.sql`, `V3__event_log.sql`), schema `jwt_template_app` (set via `.env`). Applied manually, not via Flyway. Password hashing: Argon2id (`Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`).
 
@@ -133,9 +141,9 @@ src/main/resources/
 | POST   | /auth/change-email             | JWT  | Request email change → 202                                                                     |
 | POST   | /auth/unlock                   | —    | Recovery: unlock a LOCKED account → 202                                                       |
 | POST   | /auth/logout                   | JWT  | Revoke current token (logout) → 200                                                           |
-| GET    | /hosts                         | JWT  | List hosts (paginated). Non-admin see own hosts only *(spec'd, not yet implemented)*         |
-| GET    | /hosts/{hostId}                | JWT  | Get host by ID with GeoIP data *(spec'd, not yet implemented)*                              |
-| PATCH  | /hosts/{hostId}                | JWT  | Ban a host *(spec'd, not yet implemented)*                                                   |
+| GET    | /users/{userId}/hosts          | JWT  | List hosts (paginated). ABAC-guarded: self-access or ADMIN→CUSTOMER; IP binding enforced |
+| GET    | /users/{userId}/hosts/{hostId} | JWT  | Get host by ID with GeoIP data *(spec'd, not yet implemented)*                              |
+| PATCH  | /users/{userId}/hosts/{hostId} | JWT  | Ban a host *(spec'd, not yet implemented)*                                                   |
 | GET    | /geoip                         | —    | Resolve client geolocation (X-Forwarded-For)                                                 |
 | GET    | /geoip/{ip}                    | —    | Resolve IP geolocation (IPv4/IPv6)                                                           |
 | GET    | /users                         | JWT  | List users (paginated, admin only)                                                          |
@@ -149,8 +157,8 @@ src/main/resources/
 - Native DDL in `src/main/resources/db/migration/` — applied manually, not via Flyway
 - Three migration files: `V1__init.sql` (user_role, user_status, user), `V2__host.sql` (host_status, host), `V3__event_log.sql` (event_log)
 - Schema: `jwt_template_app` (configured via `spring.jpa.properties.hibernate.default_schema` in `.env`)
-- DDL creates enum `user_role` (ADMIN, CUSTOMER), enum `user_status` (ACTIVE, INACTIVE, LOCKED), enum `host_status` (ACTIVE, INACTIVE, BANNED)
-- Tables: `"user"` (UUID PK), `host` (UUID PK, FK to user, unique ip_address), `event_log` (UUID PK, FK to host)
+- DDL creates enum `user_role` (ADMIN, CUSTOMER), enum `user_status` (ACTIVE, INACTIVE, LOCKED), enum `host_status` (AUTHORIZED, BANNED)
+- Tables: `"user"` (UUID PK, `username`, `email`, `password`, `role`, `status`, `verified`), `host` (UUID PK, FK to user, unique `ip_address`, `status`, `last_seen_at`, `updated_at`), `event_log` (UUID PK, FK to host, `user_agent`, `status`, `description`, `created_at`)
 - Password encoding: Argon2id via Spring Security's `Argon2PasswordEncoder`
 
 ### Redis
@@ -236,10 +244,10 @@ JAVA_HOME=$HOME/.jdks/openjdk-26.0.2.1 ./gradlew bootRun
 
 ### Authorization (SecurityFilterChain)
 - `/auth/**`, `/syn`, `/geoip/**` → `permitAll()`
-- `/users/**`, `/hosts/**` → `authenticated()`
+- `/users`, `/users/**` → `authenticated()` (covers `/users/{userId}`, `/users/{userId}/hosts`, `/users/{userId}/hosts/{hostId}`)
 - Unauthenticated → 401, unauthorized → 403
 
-### Fine-grained access control (`ResourcesAccessRules`)
+### Fine-grained access control (`ABACRulesService`)
 Injected into services, called before operations. Rules:
 - **Self-access**: requesterId == targetId
 - **ADMIN → CUSTOMER**: admin can access customer resources
@@ -284,7 +292,7 @@ All verification flows consume tokens via the same `GET /auth/verification/{toke
 - **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
 - **JWT auth**: claim-based — extract `userId` + `role` + `ip_address` from token, no `UserDetailsService`
 - **Async**: `@EnableAsync` + `@Async("poolName")` on service methods, dedicated `ThreadPoolTaskExecutor` per domain in `AsyncConfig`
-- **Resources access**: `ResourcesAccessRules` — inject, call `grantAccessFor(targetId, targetRole, request)` before operations and `enforceIpBinding(auth, request)` on JWT endpoints. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
+- **Resources access**: `ABACRulesService` — inject, call `grantAccessFor(userId, request)` before operations and `enforceIpBinding(auth, request)` on JWT endpoints. Self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding enforced
 - **OpenAPI pagination**: `{data: [...], meta: {page (1-indexed), size, total}}`
 - **API prefix**: no global prefix — each controller sets its own (`/auth`, `/users`, `/syn`, `/geoip`)
 - **GeoIP**: MaxMind MMDB — either `classpath:geoip/GeoLite2-City.mmdb` (bundled) or `file:/mnt/geoip/GeoLite2-City.mmdb` (NFS-mounted). Update manually — re-download from MaxMind and replace.

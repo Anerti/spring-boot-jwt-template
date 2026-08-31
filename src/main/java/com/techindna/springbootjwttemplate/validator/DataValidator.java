@@ -13,6 +13,7 @@ public class DataValidator {
     private static final Pattern EMAIL_FORMAT = Pattern.compile("^[a-z0-9_.-]+@[a-z0-9_-]+(\\.[a-z]+){1,2}$");
     private static final Pattern NAME_FORMAT = Pattern.compile("^[A-Z][a-z-'éèê ]{2,}$");
     private static final Pattern USERNAME_FORMAT = Pattern.compile("^[a-zA-Z_0-9-]{2,}$");
+    private static final Pattern IP_ADDRESS = Pattern.compile("^(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|[0-9a-fA-F:]+)$");
 
     public void checkNullData(String field, String value) {
         if (value == null || value.isBlank()) {
@@ -50,6 +51,12 @@ public class DataValidator {
 
         if (!NAME_FORMAT.matcher(value).matches()) {
             throw new UnprocessableContentException(String.format("%s must start with a capital letter and contain only letters, hyphens, apostrophes, and spaces", field));
+        }
+    }
+
+    public void validateIpAddress(String ip) {
+        if (ip != null && !ip.isBlank() && !IP_ADDRESS.matcher(ip).matches()) {
+            throw new UnprocessableContentException(String.format("IP address %s is not valid", ip));
         }
     }
 
