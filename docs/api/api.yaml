@@ -861,6 +861,163 @@ paths:
                 message: User not found
                 timestamp: 2026-07-20T15:00:00Z
 
+  # ──────────────── Event log ────────────────
+  /event-log:
+    get:
+      operationId: listEventLogs
+      summary: List event log records (paginated)
+      description: Returns a paginated list of authentication event log records visible to the authenticated caller. Any authenticated user can call this endpoint, but without an explicit filter the list is scoped to the caller's own hosts — a non-admin caller cannot see event logs belonging to another user's hosts.
+      tags: [EventLog]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/EventLogStatus'
+          description: Filter by event log status
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Inclusive lower bound on created_at (YYYY-MM-DD)
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Inclusive upper bound on created_at (YYYY-MM-DD)
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Page number (1-indexed)
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: Page size
+        - name: sortByCreatedAt
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort event logs by created_at (asc or desc, default desc)
+      responses:
+        '200':
+          description: Paginated event log list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventLog'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to access the requested event logs
+                timestamp: 2026-07-20T15:00:00Z
+        '422':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 422
+                error: Unprocessable Entity
+                message: Page size must be between 1 and 100
+                timestamp: 2026-07-20T15:00:00Z
+
+  /event-log/{eventLogId}:
+    get:
+      operationId: getEventLog
+      summary: Get an event log record by ID
+      description: Returns a single event log record by its ID with full host details. Any authenticated user can call this endpoint, but a non-admin caller can only retrieve event logs belonging to their own hosts — attempting to access another user's event log is rejected.
+      tags: [EventLog]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventLogId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Event log record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventLogDetail'
+        '401':
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 401
+                error: Unauthorized
+                message: Missing or invalid authentication token
+                timestamp: 2026-07-20T15:00:00Z
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 403
+                error: Forbidden
+                message: Insufficient privileges to access this event log
+                timestamp: 2026-07-20T15:00:00Z
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+              example:
+                status: 404
+                error: Not Found
+                message: Event log not found
+                timestamp: 2026-07-20T15:00:00Z
+
   # ──────────────── Hosts ────────────────
   /hosts:
     get:
@@ -1539,6 +1696,80 @@ components:
         timezone: America/Los_Angeles
         latitude: 37.386
         longitude: -122.084
+
+    # ── Event log status ──
+    EventLogStatus:
+      type: string
+      enum: [info, approved, security, warning]
+      description: Event log severity / classification
+
+    # ── Event log record (summary, used in list) ──
+    EventLog:
+      type: object
+      required: [id, hostId, userAgent, eventLogStatus, description, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        hostId:
+          type: string
+          format: uuid
+          description: Host that generated this event
+        userAgent:
+          type: string
+          maxLength: 512
+          description: Client user-agent header at the time of the event
+        eventLogStatus:
+          $ref: '#/components/schemas/EventLogStatus'
+        description:
+          type: string
+          maxLength: 100
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: 9c13e3aa-2e44-4bfc-8dba-1b735c94f4d8
+        hostId: 550e8400-e29b-41d4-a716-446655440000
+        userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+        eventLogStatus: security
+        description: Failed login attempt — account locked
+        createdAt: 2026-07-20T14:05:00Z
+
+    # ── Event log detail (single-record endpoint) ──
+    EventLogDetail:
+      type: object
+      required: [id, host, userAgent, eventLogStatus, description, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        host:
+          $ref: '#/components/schemas/Host'
+        userAgent:
+          type: string
+          maxLength: 512
+          description: Client user-agent header at the time of the event
+        eventLogStatus:
+          $ref: '#/components/schemas/EventLogStatus'
+        description:
+          type: string
+          maxLength: 100
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: 9c13e3aa-2e44-4bfc-8dba-1b735c94f4d8
+        host:
+          id: 550e8400-e29b-41d4-a716-446655440000
+          ipAddress: 203.0.113.42
+          hostStatus: authorized
+          lastSeenAt: 2026-07-20T14:00:00Z
+        userAgent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+        eventLogStatus: security
+        description: Failed login attempt — account locked
+        createdAt: 2026-07-20T14:05:00Z
 
     Meta:
       type: object
