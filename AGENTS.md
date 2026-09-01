@@ -24,7 +24,8 @@ com.techindna.springbootjwttemplate
 │   ├── GeoIpController.java              # GET /geoip, GET /geoip/{ip}
 │   ├── SynController.java                # GET /syn
 │   ├── UserController.java               # GET/PATCH /users/{userId}
-│   └── HostController.java               # GET /users/{userId}/hosts, GET /users/{userId}/hosts/{hostId}
+│   ├── HostController.java               # GET /users/{userId}/hosts, GET /users/{userId}/hosts/{hostId}
+│   └── EventLogController.java           # GET /users/{userId}/event-log
 ├── dto/
 │   ├── LoginInput.java                   # login request body (username/email, password)
 │   ├── RegisterInput.java                # registration request body
@@ -36,6 +37,7 @@ com.techindna.springbootjwttemplate
 │   ├── VerifyRegistrationResponse.java   # token + user response
 │   ├── HostListQuery.java                # host list filter + sort params
 │   ├── HostDetailResponse.java           # host detail response (with GeoIP data)
+│   ├── EventLogListQuery.java            # event log list filter + sort params
 │   ├── Meta.java                         # pagination metadata
 │   └── PaginatedResponse.java            # { data, meta } envelope
 ├── entity/
@@ -63,12 +65,13 @@ com.techindna.springbootjwttemplate
 ├── mapper/
 │   ├── UserMapper.java                   # RegisterInput → JUser, JUser → User
 │   ├── GeoIpMapper.java                 # CityResponse → GeoIpResponse
-│   └── HostMapper.java                  # JHost → Host, JHost + GeoIpResponse → HostDetailResponse
+│   ├── HostMapper.java                  # JHost → Host, JHost + GeoIpResponse → HostDetailResponse
+│   └── EventLogMapper.java              # JEventLog → EventLog
 ├── repository/
 │   ├── AuthRepository.java               # JPA repository (findByEmail, findByUsername)
 │   ├── UserRepository.java               # JPA repository (CRUD)
 │   ├── HostRepository.java               # JPA repository (findByIpAddress, findByIpAddressAndUser_Id, findByIdAndUser_Id, search with filters)
-│   ├── LogRepository.java                # JPA repository (event log CRUD)
+│   ├── LogRepository.java                # JPA repository (event log CRUD + search with filters)
 │   └── model/
 │       ├── JUser.java                    # JPA entity (PostgreSQL "user" table)
 │       ├── JHost.java                    # JPA entity (PostgreSQL "host" table)
@@ -77,6 +80,7 @@ com.techindna.springbootjwttemplate
 │   ├── AuthService.java                  # register + login + verification + resend + unlock + change-password/email + failed login tracking
 │   ├── UserService.java                  # getUser + updateUser (with ABACRulesService)
 │   ├── HostService.java                  # listHosts + getHost (paginated, filtered, ABAC-guarded)
+│   ├── EventLogService.java              # listEventLogs (paginated, filtered, ABAC-guarded)
 │   ├── HostEventService.java             # recordHostAndCheckBan + logHostEvent
 │   ├── GeoIpService.java                 # IP lookup, client IP extraction
 │   ├── ABACRulesService.java             # grantAccessFor + enforceIpBinding (ABAC: self/ADMIN→CUSTOMER; ADMIN→ADMIN denied)
@@ -146,6 +150,7 @@ src/main/resources/
 | GET    | /users/{userId}/hosts          | JWT  | List hosts (paginated). ABAC-guarded: self-access or ADMIN→CUSTOMER; IP binding enforced |
 | GET    | /users/{userId}/hosts/{hostId} | JWT  | Get host by ID with GeoIP data                                                              |
 | PATCH  | /users/{userId}/hosts/{hostId} | JWT  | Ban a host *(spec'd, not yet implemented)*                                                   |
+| GET    | /users/{userId}/event-log      | JWT  | List event logs (paginated). ABAC-guarded: self-access or ADMIN→CUSTOMER                    |
 | GET    | /geoip                         | —    | Resolve client geolocation (X-Forwarded-For)                                                 |
 | GET    | /geoip/{ip}                    | —    | Resolve IP geolocation (IPv4/IPv6)                                                           |
 | GET    | /users                         | JWT  | List users (paginated, admin only) *(spec'd, not yet implemented)*                           |
