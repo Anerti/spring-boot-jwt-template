@@ -4,6 +4,7 @@ import com.techindna.springbootjwttemplate.dto.HostDetailResponse;
 import com.techindna.springbootjwttemplate.dto.HostListQuery;
 import com.techindna.springbootjwttemplate.dto.Meta;
 import com.techindna.springbootjwttemplate.dto.PaginatedResponse;
+import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
 import com.techindna.springbootjwttemplate.entity.GeoIpResponse;
 import com.techindna.springbootjwttemplate.entity.Host;
 import com.techindna.springbootjwttemplate.exception.http.NotFoundException;
@@ -37,6 +38,7 @@ public class HostService {
     private final DataValidator dataValidator;
     private final ABACRulesService abacRulesService;
     private final GeoIpService geoIpService;
+    private final HostEventService hostEventService;
 
     @Value("${app.pagination.default-page}")
     private int defaultPage;
@@ -71,12 +73,15 @@ public class HostService {
         return new PaginatedResponse<>(data.isEmpty() ? null : data, new Meta(page, size, resultPage.getTotalElements()));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public HostDetailResponse getHost(UUID userId, UUID hostId, HttpServletRequest request) {
         JUser juser = abacRulesService.grantAccessFor(userId, request);
 
+        hostEventService.recordHostAndCheckBan(juser, request);
         JHost jHost = hostRepository.findByIdAndUser_Id(hostId, juser.getId())
                 .orElseThrow(() -> new NotFoundException("Host not found"));
+
+        hostEventService.logHostEvent(jHost, "HOST_DETAIL_REQUESTED", EventLogStatus.INFO, request);
 
         GeoIpResponse geo;
         try {

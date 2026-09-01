@@ -22,7 +22,7 @@ public class HostEventService {
     private final LogRepository logRepository;
     private final GeoIpService geoIpService;
 
-    @Transactional
+    @Transactional(noRollbackFor = ForbiddenException.class)
     public JHost recordHostAndCheckBan(JUser user, HttpServletRequest servletRequest) {
         String ipAddress = geoIpService.extractClientIp(servletRequest);
 
@@ -34,6 +34,7 @@ public class HostEventService {
                         .build());
 
         if (host.getStatus() == HostStatus.BANNED) {
+            logHostEvent(host, "BANNED_HOST_ACCESS_ATTEMPT", EventLogStatus.SECURITY, servletRequest);
             throw new ForbiddenException(String.format("Host %s is banned from accessing this account", ipAddress));
         }
 
