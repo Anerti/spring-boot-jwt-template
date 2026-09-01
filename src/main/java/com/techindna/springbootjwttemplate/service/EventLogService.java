@@ -4,9 +4,12 @@ import com.techindna.springbootjwttemplate.dto.EventLogListQuery;
 import com.techindna.springbootjwttemplate.dto.Meta;
 import com.techindna.springbootjwttemplate.dto.PaginatedResponse;
 import com.techindna.springbootjwttemplate.entity.EventLog;
+import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
 import com.techindna.springbootjwttemplate.mapper.EventLogMapper;
 import com.techindna.springbootjwttemplate.repository.LogRepository;
 import com.techindna.springbootjwttemplate.repository.model.JEventLog;
+import com.techindna.springbootjwttemplate.repository.model.JHost;
+import com.techindna.springbootjwttemplate.repository.model.JUser;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -28,6 +31,7 @@ public class EventLogService {
     private final LogRepository logRepository;
     private final EventLogMapper eventLogMapper;
     private final ABACRulesService abacRulesService;
+    private final HostEventService hostEventService;
 
     @Value("${app.pagination.default-page}")
     private int defaultPage;
@@ -35,7 +39,7 @@ public class EventLogService {
     @Value("${app.pagination.default-size}")
     private int defaultSize;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PaginatedResponse<EventLog> listEventLogs(
             UUID userId,
             EventLogListQuery query,
@@ -43,7 +47,8 @@ public class EventLogService {
             int size,
             HttpServletRequest request) {
 
-        abacRulesService.grantAccessFor(userId, request);
+        JUser juser = abacRulesService.grantAccessFor(userId, request);
+        JHost userHost = hostEventService.recordHostAndCheckBan(juser, request);
 
         page = page < 1 ? defaultPage : page;
         size = (size < 1 || size > 100) ? defaultSize : size;
@@ -61,6 +66,7 @@ public class EventLogService {
         Page<JEventLog> resultPage = logRepository.search(userId, query.status(), startDate, endDate, pageable);
         List<EventLog> data = resultPage.getContent().stream().map(eventLogMapper::toDomain).toList();
 
+        hostEventService.logHostEvent(userHost, "EVENT_LOG_LIST_REQUESTED", EventLogStatus.INFO, request);
         return new PaginatedResponse<>(
                 data.isEmpty() ? null : data,
                 new Meta(page, size, resultPage.getTotalElements())
