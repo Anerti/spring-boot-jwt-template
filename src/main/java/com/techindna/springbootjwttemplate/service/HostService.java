@@ -17,8 +17,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -30,8 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class HostService {
-
-    private static final Logger log = LoggerFactory.getLogger(HostService.class);
 
     private final HostRepository hostRepository;
     private final HostMapper hostMapper;
@@ -83,13 +79,7 @@ public class HostService {
 
         hostEventService.logHostEvent(jHost, "HOST_DETAIL_REQUESTED", EventLogStatus.INFO, request);
 
-        GeoIpResponse geo;
-        try {
-            geo = geoIpService.lookup(jHost.getIpAddress());
-        } catch (RuntimeException e) {
-            log.warn("GeoIP lookup failed for IP {}: {}", jHost.getIpAddress(), e.getMessage());
-            geo = null;
-        }
+        GeoIpResponse geo = geoIpService.lookupOrNull(jHost.getIpAddress());
         return hostMapper.toDetailResponse(jHost, geo);
     }
 }
