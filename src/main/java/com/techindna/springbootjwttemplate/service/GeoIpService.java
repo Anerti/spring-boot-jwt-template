@@ -59,14 +59,17 @@ public class GeoIpService {
                 request.getRemoteAddr();
     }
 
-    public GeoIpResponse resolveGeoData(HttpServletRequest request) {
-        String ip = extractClientIp(request);
+    public GeoIpResponse lookupOrNull(String ip) {
         try {
             return lookup(ip);
         } catch (RuntimeException e) {
             log.warn("GeoIP lookup failed for IP {}: {}", ip, e.getMessage());
             return null;
         }
+    }
+
+    public GeoIpResponse resolveGeoData(HttpServletRequest request) {
+        return lookupOrNull(extractClientIp(request));
     }
 
 }

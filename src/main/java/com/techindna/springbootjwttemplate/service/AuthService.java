@@ -1,7 +1,6 @@
 package com.techindna.springbootjwttemplate.service;
 
 import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
-import com.techindna.springbootjwttemplate.entity.enums.HostStatus;
 import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
@@ -16,10 +15,7 @@ import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
 import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
 import com.techindna.springbootjwttemplate.mapper.UserMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
-import com.techindna.springbootjwttemplate.repository.HostRepository;
-import com.techindna.springbootjwttemplate.repository.LogRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
-import com.techindna.springbootjwttemplate.repository.model.JEventLog;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
@@ -31,7 +27,6 @@ import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.time.Instant;
 import java.util.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -56,8 +51,7 @@ public class AuthService {
     private final VerificationCodeStore verificationCodeStore;
     private final JwtTokenProvider jwtTokenProvider;
     private final GeoIpService geoIpService;
-    private final HostRepository hostRepository;
-    private final LogRepository logRepository;
+    private final HostEventService hostEventService;
     private final FailedLoginTracker failedLoginTracker;
 
     @Transactional
@@ -95,32 +89,32 @@ public class AuthService {
                 authRepository.findByUsername(request.getUsername().strip())
                         .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
-        JHost host = recordHostAndCheckBan(jUser, servletRequest);
+        JHost host = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
 
         if (UserStatus.LOCKED == jUser.getStatus()) {
-            logHostEvent(host, "LOGIN_FAILED : account locked", EventLogStatus.SECURITY, servletRequest);
+            hostEventService.logHostEvent(host, "LOGIN_FAILED : account locked", EventLogStatus.SECURITY, servletRequest);
             throw new ForbiddenException("Account locked");
         }
 
         if (!jUser.getVerified()) {
-            logHostEvent(host, "LOGIN_FAILED : unverified account", EventLogStatus.SECURITY, servletRequest);
+            hostEventService.logHostEvent(host, "LOGIN_FAILED : unverified account", EventLogStatus.SECURITY, servletRequest);
             throw new ForbiddenException("Account has not been verified");
         }
 
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            logHostEvent(host, "LOGIN_SUCCESS : verification link sent", EventLogStatus.APPROVED, servletRequest);
+            hostEventService.logHostEvent(host, "LOGIN_SUCCESS : verification link sent", EventLogStatus.APPROVED, servletRequest);
             authMailService.sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
                     jUser.getUsername(), "Login Verification", "mail/login-verification", servletRequest);
             return new MessageBody("A verification link has been sent to your email");
         }
 
         int failedCount = failedLoginTracker.increment(jUser.getId());
-        logHostEvent(host, "LOGIN_FAILED : invalid credentials", EventLogStatus.SECURITY, servletRequest);
+        hostEventService.logHostEvent(host, "LOGIN_FAILED : invalid credentials", EventLogStatus.SECURITY, servletRequest);
 
         if (failedCount == MAX_FAILED_LOGIN_ATTEMPTS) {
             jUser.setStatus(UserStatus.LOCKED);
             authRepository.save(jUser);
-            logHostEvent(host, "ACCOUNT_LOCKED : repeated failed login attempts", EventLogStatus.SECURITY, servletRequest);
+            hostEventService.logHostEvent(host, "ACCOUNT_LOCKED : repeated failed login attempts", EventLogStatus.SECURITY, servletRequest);
             authMailService.sendAccountLockedNotification(jUser.getEmail(), jUser.getFirstName(), servletRequest);
             throw new ForbiddenException("Account has been locked due to multiple failed logins");
         }
@@ -135,33 +129,33 @@ public class AuthService {
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
         abacRulesService.enforceIpBinding(auth, servletRequest);
-        JHost userHost = recordHostAndCheckBan(jUser, servletRequest);
+        JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
 
         if (UserStatus.LOCKED == jUser.getStatus()) {
-            logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : account locked", EventLogStatus.SECURITY, servletRequest);
+            hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : account locked", EventLogStatus.SECURITY, servletRequest);
             throw new ForbiddenException("Account locked");
         }
 
         if (!jUser.getVerified()) {
-            logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : account not verified", EventLogStatus.SECURITY, servletRequest);
+            hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : account not verified", EventLogStatus.SECURITY, servletRequest);
             throw new ForbiddenException("Account has not been verified");
         }
 
         authValidator.validateChangePassword(request);
 
         if (!passwordEncoder.matches(request.getOldPassword(), jUser.getPassword())) {
-            logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : wrong current password", EventLogStatus.SECURITY, servletRequest);
+            hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : wrong current password", EventLogStatus.SECURITY, servletRequest);
             throw new UnauthorizedException("Invalid credentials");
         }
 
         if (passwordEncoder.matches(request.getNewPassword(), jUser.getPassword())) {
-            logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : new password matches current", EventLogStatus.WARNING, servletRequest);
+            hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : new password matches current", EventLogStatus.WARNING, servletRequest);
             throw new UnprocessableContentException("Cannot use the current password");
         }
 
         jUser.setPassword(passwordEncoder.encode(request.getNewPassword()));
         authRepository.save(jUser);
-        logHostEvent(userHost, "PASSWORD_CHANGE_SUCCEEDED", EventLogStatus.APPROVED, servletRequest);
+        hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_SUCCEEDED", EventLogStatus.APPROVED, servletRequest);
 
         authMailService.sendPasswordChangedNotification(jUser.getEmail(), jUser.getFirstName(), servletRequest);
 
@@ -175,10 +169,10 @@ public class AuthService {
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
         abacRulesService.enforceIpBinding(auth, servletRequest);
-        JHost userHost = recordHostAndCheckBan(jUser, servletRequest);
+        JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
 
         if (UserStatus.LOCKED == jUser.getStatus()) {
-            logHostEvent(userHost, "EMAIL_CHANGE_FAILED : account locked", EventLogStatus.SECURITY, servletRequest);
+            hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_FAILED : account locked", EventLogStatus.SECURITY, servletRequest);
             throw new ForbiddenException("Account locked");
         }
 
@@ -186,7 +180,7 @@ public class AuthService {
 
         String normalizedNewEmail = request.getNewEmail().strip().toLowerCase();
         if (normalizedNewEmail.equals(jUser.getEmail())) {
-            logHostEvent(userHost, "EMAIL_CHANGE_FAILED : new email matches current", EventLogStatus.WARNING, servletRequest);
+            hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_FAILED : new email matches current", EventLogStatus.WARNING, servletRequest);
             throw new UnprocessableContentException("The new email must be different from the current email");
         }
 
@@ -197,11 +191,11 @@ public class AuthService {
 
             authMailService.sendChangeEmailConfirmation(jUser.getEmail(), jUser.getFirstName(), normalizedNewEmail, servletRequest);
 
-            logHostEvent(userHost, "EMAIL_CHANGE_PENDING : confirmation sent to new address", EventLogStatus.INFO, servletRequest);
+            hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_PENDING : confirmation sent to new address", EventLogStatus.INFO, servletRequest);
             return new MessageBody("A verification link has been sent to your new email address");
         }
 
-        logHostEvent(userHost, "EMAIL_CHANGE_FAILED : wrong current password", EventLogStatus.SECURITY, servletRequest);
+        hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_FAILED : wrong current password", EventLogStatus.SECURITY, servletRequest);
         throw new UnauthorizedException("Invalid credentials");
     }
 
@@ -212,16 +206,16 @@ public class AuthService {
         JUser jUser = authRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new ForbiddenException("Account not locked"));
 
-        JHost userHost = recordHostAndCheckBan(jUser, servletRequest);
+        JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
         if (jUser.getStatus() != UserStatus.LOCKED) {
-            logHostEvent(userHost, "UNLOCK_FAILED : account not locked", EventLogStatus.WARNING, servletRequest);
+            hostEventService.logHostEvent(userHost, "UNLOCK_FAILED : account not locked", EventLogStatus.WARNING, servletRequest);
             throw new ForbiddenException("Account not locked");
         }
 
         authMailService.sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
                 jUser.getUsername(), "Account Unlock", "mail/unlock-account", servletRequest);
 
-        logHostEvent(userHost, "UNLOCK_REQUESTED : verification email sent", EventLogStatus.INFO, servletRequest);
+        hostEventService.logHostEvent(userHost, "UNLOCK_REQUESTED : verification email sent", EventLogStatus.INFO, servletRequest);
         return new MessageBody("A verification link has been sent to your email to unlock your account");
     }
 
@@ -234,27 +228,27 @@ public class AuthService {
         JUser jUser = authRepository.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException("Invalid or expired token"));
 
-        JHost host = recordHostAndCheckBan(jUser, servletRequest);
-        logHostEvent(host, "VERIFY_SUCCESS : token accepted", EventLogStatus.APPROVED, servletRequest);
+        JHost host = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
+        hostEventService.logHostEvent(host, "VERIFY_SUCCESS : token accepted", EventLogStatus.APPROVED, servletRequest);
 
         if (!jUser.getVerified()) {
             jUser.setVerified(true);
             authRepository.save(jUser);
-            logHostEvent(host, "REGISTRATION_VERIFIED", EventLogStatus.APPROVED, servletRequest);
+            hostEventService.logHostEvent(host, "REGISTRATION_VERIFIED", EventLogStatus.APPROVED, servletRequest);
         }
 
         if (jUser.getStatus() == UserStatus.LOCKED) {
             jUser.setStatus(UserStatus.ACTIVE);
             authRepository.save(jUser);
             failedLoginTracker.reset(jUser.getId());
-            logHostEvent(host, "UNLOCK_SUCCEEDED", EventLogStatus.APPROVED, servletRequest);
+            hostEventService.logHostEvent(host, "UNLOCK_SUCCEEDED", EventLogStatus.APPROVED, servletRequest);
         }
 
         Optional<String> pendingEmail = verificationCodeStore.getPendingEmailByToken(tokenStr);
         if (pendingEmail.isPresent()) {
             jUser.setEmail(pendingEmail.get());
             authRepository.save(jUser);
-            logHostEvent(host, "EMAIL_CHANGE_SUCCEEDED", EventLogStatus.APPROVED, servletRequest);
+            hostEventService.logHostEvent(host, "EMAIL_CHANGE_SUCCEEDED", EventLogStatus.APPROVED, servletRequest);
             verificationCodeStore.deletePendingEmailByToken(tokenStr);
         }
 
@@ -283,33 +277,5 @@ public class AuthService {
                 jUser.getUsername(), "Email Verification", "mail/verification", servletRequest);
 
         return new MessageBody("A verification link has been sent to your email");
-    }
-
-    private JHost recordHostAndCheckBan(JUser user, HttpServletRequest servletRequest) {
-        String ipAddress = geoIpService.extractClientIp(servletRequest);
-        
-        JHost host = hostRepository.findByIpAddressAndUser_Id(ipAddress, user.getId())
-                .orElseGet(() -> JHost.builder()
-                        .user(user)
-                        .ipAddress(ipAddress)
-                        .lastSeenAt(Instant.now())
-                        .build());
-
-        if (host.getStatus() == HostStatus.BANNED) {
-            throw new ForbiddenException(String.format("Host %s is banned from accessing this account", ipAddress));
-        }
-
-        return hostRepository.saveAndFlush(host);
-    }
-
-    private void logHostEvent(JHost host, String description, EventLogStatus status, HttpServletRequest servletRequest) {
-        String rawUserAgent = servletRequest.getHeader("User-Agent");
-        JEventLog logEntry = JEventLog.builder()
-                .host(host)
-                .userAgent((rawUserAgent != null && !rawUserAgent.isBlank()) ? rawUserAgent : "Unknown")
-                .description(description)
-                .status(status)
-                .build();
-        logRepository.save(logEntry);
     }
 }

@@ -1,12 +1,17 @@
 package com.techindna.springbootjwttemplate.service;
 
+import com.techindna.springbootjwttemplate.dto.HostDetailResponse;
 import com.techindna.springbootjwttemplate.dto.HostListQuery;
 import com.techindna.springbootjwttemplate.dto.Meta;
 import com.techindna.springbootjwttemplate.dto.PaginatedResponse;
+import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
+import com.techindna.springbootjwttemplate.entity.GeoIpResponse;
 import com.techindna.springbootjwttemplate.entity.Host;
+import com.techindna.springbootjwttemplate.exception.http.NotFoundException;
 import com.techindna.springbootjwttemplate.mapper.HostMapper;
 import com.techindna.springbootjwttemplate.repository.HostRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
+import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -28,6 +33,8 @@ public class HostService {
     private final HostMapper hostMapper;
     private final DataValidator dataValidator;
     private final ABACRulesService abacRulesService;
+    private final GeoIpService geoIpService;
+    private final HostEventService hostEventService;
 
     @Value("${app.pagination.default-page}")
     private int defaultPage;
@@ -60,5 +67,19 @@ public class HostService {
         List<Host> data = resultPage.getContent().stream().map(hostMapper::toDomain).toList();
 
         return new PaginatedResponse<>(data.isEmpty() ? null : data, new Meta(page, size, resultPage.getTotalElements()));
+    }
+
+    @Transactional
+    public HostDetailResponse getHost(UUID userId, UUID hostId, HttpServletRequest request) {
+        JUser juser = abacRulesService.grantAccessFor(userId, request);
+
+        hostEventService.recordHostAndCheckBan(juser, request);
+        JHost jHost = hostRepository.findByIdAndUser_Id(hostId, juser.getId())
+                .orElseThrow(() -> new NotFoundException("Host not found"));
+
+        hostEventService.logHostEvent(jHost, "HOST_DETAIL_REQUESTED", EventLogStatus.INFO, request);
+
+        GeoIpResponse geo = geoIpService.lookupOrNull(jHost.getIpAddress());
+        return hostMapper.toDetailResponse(jHost, geo);
     }
 }

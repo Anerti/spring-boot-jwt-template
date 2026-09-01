@@ -1,5 +1,6 @@
 package com.techindna.springbootjwttemplate.controller;
 
+import com.techindna.springbootjwttemplate.dto.HostDetailResponse;
 import com.techindna.springbootjwttemplate.dto.HostListQuery;
 import com.techindna.springbootjwttemplate.dto.PaginatedResponse;
 import com.techindna.springbootjwttemplate.entity.Host;
@@ -31,5 +32,13 @@ public class HostController {
             HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.OK).body(hostService.listHosts(
                 userId, query, page, size, request));
+    }
+
+    @GetMapping("/{hostId}")
+    public ResponseEntity<HostDetailResponse> getHost(
+            @PathVariable UUID userId,
+            @PathVariable UUID hostId,
+            HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.OK).body(hostService.getHost(userId, hostId, request));
     }
 }
