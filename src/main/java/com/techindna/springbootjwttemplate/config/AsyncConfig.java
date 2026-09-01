@@ -17,11 +17,20 @@ public class AsyncConfig {
 
     @Bean("mailExecutor")
     public Executor mailExecutor() {
+        return createExecutor("mail-");
+    }
+
+    @Bean("eventLogExecutor")
+    public Executor eventLogExecutor() {
+        return createExecutor("event-log-");
+    }
+
+    private Executor createExecutor(String threadNamePrefix) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(CORE_POOL_SIZE);
         executor.setMaxPoolSize(MAX_POOL_SIZE);
         executor.setQueueCapacity(QUEUE_CAPACITY);
-        executor.setThreadNamePrefix("mail-");
+        executor.setThreadNamePrefix(threadNamePrefix);
         executor.initialize();
         return executor;
     }
