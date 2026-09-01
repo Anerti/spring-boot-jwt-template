@@ -153,8 +153,8 @@ Schema is managed via native PostgreSQL DDL in `src/main/resources/db/migration/
 | File | What it creates |
 |------|-----------------|
 | `V1__init.sql` | Enum `user_role` (ADMIN, CUSTOMER), enum `user_status` (ACTIVE, INACTIVE, LOCKED), table `"user"` |
-| `V2__host.sql` | Enum `host_status` (ACTIVE, INACTIVE, BANNED), table `host` |
-| `V3__event_log.sql` | Table `event_log` |
+| `V2__host.sql` | Enum `host_status` (AUTHORIZED, BANNED), table `host` |
+| `V3__event_log.sql` | Enum `event_log_status` (INFO, APPROVED, SECURITY, WARNING), table `event_log` |
 
 The DDL in `V1__init.sql` creates:
 - **Enum** `jwt_template_app.user_role`: `ADMIN`, `CUSTOMER`
@@ -170,6 +170,7 @@ Redis serves two purposes:
 **Verification code storage** (`VerificationCodeStore`):
 - Stores verification tokens with a 15-minute TTL
 - Key pattern: `verification:{token}` → email address
+- Also stores pending email for change-email flow: `pending_email:{token}` → new email address
 - Implemented using `StringRedisTemplate`
 - Compatible with Upstash (serverless) and any RESP-compatible self-hosted Redis instance
 
@@ -189,8 +190,12 @@ Email is sent asynchronously via Spring's `@Async` with a dedicated `ThreadPoolT
 Templates are Thymeleaf HTML files in `src/main/resources/templates/mail/`:
 - `verification.html` — registration verification email
 - `login-verification.html` — login verification email
+- `unlock-account.html` — account unlock email
+- `account-locked.html` — account locked (security alert) email
+- `change-email.html` — confirm new email address email
+- `password-change.html` — password changed notification email
 
-Email variables injected into templates include: `verificationUrl`, `firstName`, `lastName`, `username`, `email`, `clientIp`, `userAgent`, `time`, `city`, `country`, `countryCode`, `timezone`, `latitude`, `longitude`.
+Email variables injected into templates include: `verificationUrl`, `unlockUrl`, `firstName`, `lastName`, `username`, `email`, `oldEmail`, `clientIp`, `userAgent`, `time`, `city`, `country`, `countryCode`, `timezone`, `latitude`, `longitude`.
 
 `MailSendException` caught by `GlobalExceptionHandler` — returns generic message, logs detail.
 
@@ -213,7 +218,7 @@ Client IP extraction: when `geoip.trust-x-forwarded-for=true`, the first IP in t
 ### Authorization (SecurityFilterChain)
 
 - `/auth/**`, `/syn`, `/geoip/**` → `permitAll()`
-- `/users/**`, `/hosts/**` → `authenticated()`
+- `/users`, `/users/**` → `authenticated()`
 - Unauthenticated requests to protected endpoints → 401 `Authentication required.`
 - Authenticated but unauthorized → 403 `Insufficient privileges.`
 
@@ -232,12 +237,12 @@ Injected into services, called before operations. Rules:
 - Key pattern: `failed_logins:{userId}`, TTL 12 hours
 - After **5 failed attempts** the account status is set to `LOCKED` (`UserStatus.LOCKED`)
 - Locked accounts cannot log in → 403 `Account locked`
-- A TODO remains to send a notification email when an account is locked (see `AuthService.java:127`)
+- On the 5th failure a notification email is sent via `AuthMailService.sendAccountLockedNotification()` using the `account-locked` template
 
 ### Host tracking & IP binding
 
 `Host` records track IP addresses seen during authentication:
-- Table `host`: `id` (UUID PK), `user_id` (FK → user), `ip_address` (unique), `user_agent`, `status` (ACTIVE/INACTIVE/BANNED), `created_at`, `updated_at`
+- Table `host`: `id` (UUID PK), `user_id` (FK → user), `ip_address`, `user_agent`, `status` (AUTHORIZED/BANNED), `last_seen_at`, `updated_at`
 - On each login/verification attempt, the host is looked up by IP + user ID, created if missing, and saved
 - If host status is `BANNED` → 403 `Host {ip} is banned from accessing this account`
 - Every authentication event is logged to `event_log` (description + timestamp)
@@ -259,12 +264,11 @@ Two-phase verification is required before an account becomes active:
 1. `POST /auth/resend-link?email=...` → validates email, finds unverified user, generates new UUID token, stores in Redis (15 min TTL), sends verification email
 
 **Unlock flow (account locked):**
-1. `POST /auth/unlock` (JWT-authenticated) → accepts email of locked account, checks caller has privileges, generates UUID token, stores in Redis (15 min TTL), sends unlock email
-2. User clicks link → `GET /auth/verification/{token}` → validates token, unlocks account, returns JWT token
+1. `POST /auth/unlock` (public recovery, no JWT) → accepts email of locked account, checks account is LOCKED (else 403, enumeration-safe), checks requesting host not banned, generates UUID token, stores in Redis (15 min TTL), sends unlock email
+2. User clicks link → `GET /auth/verification/{token}` → validates token, unlocks account (sets status ACTIVE + resets failed-login counter), returns JWT token
 
 **Change password flow:**
-1. `POST /auth/change-password` (JWT-authenticated) → validates current credentials + new password, generates UUID token, stores in Redis (15 min TTL), sends confirmation email
-2. User clicks link → `GET /auth/verification/{token}` → validates token, updates password, returns JWT token
+1. `POST /auth/change-password` (JWT-authenticated) → validates current credentials + new password (blocks reuse), changes password immediately, sends notification email → returns 200
 
 **Change email flow:**
 1. `POST /auth/change-email` (JWT-authenticated) → validates current credentials + new email, generates UUID token, stores in Redis (15 min TTL), sends confirmation email to new address
@@ -272,7 +276,7 @@ Two-phase verification is required before an account becomes active:
 
 Redis key pattern: `verification:{token}` → email address, TTL 15 minutes.
 
-> **Note:** `POST /auth/change-password`, `POST /auth/change-email`, and `POST /auth/unlock` are defined in the OpenAPI spec (`docs/api/api.yaml`) but their DTOs and controller methods are not yet implemented. The verification endpoint (`GET /auth/verification/{token}`) handles all token-consuming flows generically.
+> **Note:** `POST /auth/change-password` changes the password immediately (no verification link needed) — it sends a notification email after the change. `POST /auth/change-email` and `POST /auth/unlock` use the verification link flow via `GET /auth/verification/{token}`.
 
 ## Getting Started
 
@@ -287,15 +291,15 @@ cd spring-boot-jwt-template
 ### 2. Build
 
 ```bash
-JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew build
+JAVA_HOME=$HOME/.jdks/openjdk-26.0.2.1 ./gradlew build
 ```
 
-> `JAVA_HOME` must point to JDK 26 — the system default is JDK 26. Never set `org.gradle.java.home` in `gradle.properties` (Gradle rejects it).
+> `JAVA_HOME` must point to JDK 26 (`$HOME/.jdks/openjdk-26.0.2.1`); there is no `java` on PATH by default. Never set `org.gradle.java.home` in `gradle.properties` (Gradle rejects it).
 
 ### 3. Run
 
 ```bash
-JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew bootRun
+JAVA_HOME=$HOME/.jdks/openjdk-26.0.2.1 ./gradlew bootRun
 ```
 
 The application starts on `http://localhost:8080`.
@@ -303,7 +307,7 @@ The application starts on `http://localhost:8080`.
 ### 4. Test
 
 ```bash
-JAVA_HOME=$HOME/.jdks/ms-26.0.2 ./gradlew test
+JAVA_HOME=$HOME/.jdks/openjdk-26.0.2.1 ./gradlew test
 ```
 
 ## API Endpoints
@@ -323,12 +327,12 @@ Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/auth/register` | — | Register → 202, sends verification code by email |
-| GET | `/auth/verification/{token}` | — | Verify token → 200 with JWT token + user. Consumes tokens from register, login, resend, change-password, change-email, and unlock flows |
+| GET | `/auth/verification/{token}` | — | Verify token → 200 with JWT token + user. Consumes tokens from register, login, resend, change-email, and unlock flows |
 | POST | `/auth/login` | — | Login → 202, sends verification code by email |
 | POST | `/auth/resend-link?email=...` | — | Resend verification code → 202 |
-| POST | `/auth/change-password` | JWT | Request password change → 202, sends confirmation link by email *(spec'd, not yet implemented)* |
-| POST | `/auth/change-email` | JWT | Request email change → 202, sends confirmation link by email *(spec'd, not yet implemented)* |
-| POST | `/auth/unlock` | JWT | Request to unlock a locked account → 202, sends unlock link by email *(spec'd, not yet implemented)* |
+| POST | `/auth/change-password` | JWT | Change password immediately → 200, sends notification email |
+| POST | `/auth/change-email` | JWT | Request email change → 202, sends confirmation link to new address |
+| POST | `/auth/unlock` | — | Request to unlock a locked account → 202, sends unlock link by email |
 
 ### Hosts
 
@@ -336,7 +340,7 @@ Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
 |--------|------|------|-------------|
 | GET | `/users/{userId}/hosts` | JWT | List hosts (paginated). Non-admin callers see only their own hosts. Filter by ipAddress, status |
 | GET | `/users/{userId}/hosts/{hostId}` | JWT | Get a host by ID (includes GeoIP data for its IP). Non-admin callers can only access their own hosts |
-| PATCH | `/users/{userId}/hosts/{hostId}` | JWT | Ban a host → sets status to BANNED. Only status transition exposed via API |
+| PATCH | `/users/{userId}/hosts/{hostId}` | JWT | Ban a host → sets status to BANNED. Only status transition exposed via API *(spec'd, not yet implemented)* |
 
 ### GeoIP
 
@@ -349,10 +353,10 @@ Full OpenAPI spec: [`docs/api/api.yaml`](docs/api/api.yaml)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/users` | JWT | List users (paginated, admin only). Filter by username, firstName, lastName, email |
+| GET | `/users` | JWT | List users (paginated, admin only). Filter by username, firstName, lastName, email *(spec'd, not yet implemented)* |
 | GET | `/users/{userId}` | JWT | Get user by ID |
 | PATCH | `/users/{userId}` | JWT | Update user (username, firstName, lastName) |
-| DELETE | `/users/{userId}` | JWT | Delete user |
+| DELETE | `/users/{userId}` | JWT | Delete user *(spec'd, not yet implemented)* |
 
 ## Architecture
 
@@ -368,32 +372,39 @@ com.techindna.springbootjwttemplate
 │                                           #   - file:/mnt/geoip/GeoLite2-City.mmdb (NFS-mounted)
 ├── security/
 │   ├── SecurityConfig.java                 # SecurityFilterChain, PasswordEncoder (Argon2id)
-│   ├── ResourcesAccessRules.java           # authorization: self-access, ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding
 │   └── jwt/
 │       ├── JwtAuthenticationFilter.java    # JWT filter (extracts userId + role + ip from claims, no UserDetailsService)
 │       └── JwtTokenProvider.java           # JWT create/parse (HMAC-SHA, BASE64 secret, configurable TTL)
 ├── controller/
-│   ├── AuthController.java                 # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link
+│   ├── AuthController.java                 # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link, POST /auth/change-password, POST /auth/change-email, POST /auth/unlock
 │   ├── GeoIpController.java                # GET /geoip, GET /geoip/{ip}
 │   ├── SynController.java                  # GET /syn
-│   └── UserController.java                 # GET/PATCH/DELETE /users/{userId}
+│   ├── UserController.java                 # GET/PATCH /users/{userId}
+│   └── HostController.java                 # GET /users/{userId}/hosts, GET /users/{userId}/hosts/{hostId}
 ├── dto/
-│   ├── LoginInput.java                     # login request body (username, email, password)
-│   ├── MessageBody.java                    # { message } response
-│   ├── RegisterInput.java                  # register request body
+│   ├── LoginInput.java                     # login request body (username/email, password)
+│   ├── RegisterInput.java                  # registration request body
+│   ├── ChangePasswordInput.java            # change-password request body
+│   ├── ChangeEmailInput.java               # change-email request body
+│   ├── UnlockAccountInput.java             # unlock request body (email)
 │   ├── UpdateUserInput.java                # user update request body
-│   └── VerifyRegistrationResponse.java     # token + user response
+│   ├── MessageBody.java                    # { message } response
+│   ├── VerifyRegistrationResponse.java     # token + user response
+│   ├── HostListQuery.java                  # host list filter + sort params
+│   ├── HostDetailResponse.java             # host detail response (with GeoIP data)
+│   ├── Meta.java                           # pagination metadata
+│   └── PaginatedResponse.java              # { data, meta } envelope
 ├── entity/
 │   ├── GeoIpResponse.java                  # GeoIP lookup result record
 │   ├── User.java                           # domain record (read model)
 │   ├── Host.java                           # host domain record (read model)
 │   ├── EventLog.java                       # event log domain record (read model)
 │   ├── email/EmailDetails.java             # email details entity
-│   ├── enums/
-│   │   ├── UserRole.java                   # user role enum (ADMIN, CUSTOMER)
-│   │   ├── UserStatus.java                 # account status enum (ACTIVE, INACTIVE, LOCKED)
-│   │   └── HostStatus.java                 # host status enum (ACTIVE, INACTIVE, BANNED)
-│   └── enums/                              # enum packages
+│   └── enums/
+│       ├── UserRole.java                   # user role enum (ADMIN, CUSTOMER)
+│       ├── UserStatus.java                 # account status enum (ACTIVE, INACTIVE, LOCKED)
+│       ├── HostStatus.java                 # host status enum (AUTHORIZED, BANNED)
+│       └── EventLogStatus.java             # event log status enum (INFO, APPROVED, SECURITY, WARNING)
 ├── exception/
 │   ├── ErrorBody.java                      # error response DTO (status, error, message, timestamp)
 │   ├── GlobalExceptionHandler.java         # centralized error handling (@RestControllerAdvice)
@@ -407,28 +418,36 @@ com.techindna.springbootjwttemplate
 │       └── UnprocessableContentException.java  # 422
 ├── mapper/
 │   ├── UserMapper.java                     # RegisterInput → JUser, JUser → User
-│   └── GeoIpMapper.java                    # CityResponse → GeoIpResponse
+│   ├── GeoIpMapper.java                    # CityResponse → GeoIpResponse
+│   └── HostMapper.java                     # JHost → Host, JHost + GeoIpResponse → HostDetailResponse
 ├── repository/
 │   ├── AuthRepository.java                 # JPA repository (findByEmail, findByUsername)
 │   ├── UserRepository.java                 # JPA repository (CRUD)
-│   ├── HostRepository.java                 # JPA repository (findByIpAddress, findByIpAddressAndUser_Id)
+│   ├── HostRepository.java                 # JPA repository (findByIpAddress, findByIpAddressAndUser_Id, findByIdAndUser_Id, search with filters)
 │   ├── LogRepository.java                  # JPA repository (event log CRUD)
 │   └── model/
 │       ├── JUser.java                      # JPA entity (PostgreSQL "user" table)
 │       ├── JHost.java                      # JPA entity (PostgreSQL "host" table)
 │       └── JEventLog.java                  # JPA entity (PostgreSQL "event_log" table)
 ├── service/
-│   ├── AuthService.java                    # register + login + verification + resend + host/event logging
-│   ├── UserService.java                    # getUser + updateUser (with ResourcesAccessRules)
+│   ├── AuthService.java                    # register + login + verification + resend + unlock + change-password/email + failed login tracking
+│   ├── UserService.java                    # getUser + updateUser (with ABACRulesService)
+│   ├── HostService.java                    # listHosts + getHost (paginated, filtered, ABAC-guarded)
+│   ├── HostEventService.java               # recordHostAndCheckBan + logHostEvent
 │   ├── GeoIpService.java                   # IP lookup, client IP extraction
+│   ├── ABACRulesService.java               # grantAccessFor + enforceIpBinding (ABAC: self/ADMIN→CUSTOMER; ADMIN→ADMIN denied)
 │   ├── VerificationCodeStore.java          # Redis-based verification code storage (15 min TTL, key prefix "verification:")
-│   ├── FailedLoginTracker.java             # Redis-based failed login counter (12 h TTL, key prefix "failed_logins:")
+│   ├── redis/
+│   │   └── FailedLoginTracker.java         # Redis-based failed login counter (12 h TTL, key prefix "failed_logins:")
 │   └── mail/
+│       ├── AuthMailService.java            # composes + dispatches verification emails (token→Redis→link→send)
 │       ├── EmailService.java               # email service interface
 │       └── EmailSenderService.java         # email service implementation (Thymeleaf + @Async("mailExecutor"))
 └── validator/
     ├── DataValidator.java                  # low-level format checks (email, name, username, password, IP)
-    └── UserValidator.java                  # registration + login + update rules
+    ├── AuthValidator.java                  # auth + change-password/email validation rules
+    ├── UserValidator.java                  # user update validation rules
+    └── HostValidator.java                  # host list filter validation (page size bounds)
 ```
 
 ```
@@ -437,13 +456,17 @@ src/main/resources/
 ├── db/migration/
 │   ├── V1__init.sql                        # native DDL: user_role enum, user_status enum, "user" table
 │   ├── V2__host.sql                        # host_status enum, "host" table
-│   └── V3__event_log.sql                  # "event_log" table
+│   └── V3__event_log.sql                   # event_log_status enum, "event_log" table
 ├── geoip/
 │   └── GeoLite2-City.mmdb                  # MaxMind GeoIP database
 └── templates/
     └── mail/
-        ├── verification.html               # registration email template
-        └── login-verification.html         # login email template
+        ├── verification.html               # registration verification email
+        ├── login-verification.html         # login verification email
+        ├── unlock-account.html             # account unlock email
+        ├── account-locked.html             # account locked (security alert) email
+        ├── change-email.html               # confirm new email address email
+        └── password-change.html            # password changed notification email
 ```
 
 ### Domain Entities
@@ -451,13 +474,14 @@ src/main/resources/
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
 | `users` | User accounts with JWT auth | `id` (UUID PK), `username`, `email`, `password`, `role`, `status`, `verified` |
-| `host` | IP address tracking per user | `id` (UUID PK), `user_id` (FK), `ip_address` (unique), `user_agent`, `status` |
-| `event_log` | Authentication event audit trail | `id` (UUID PK), `host_id` (FK), `description`, `created_at` |
+| `host` | IP address tracking per user | `id` (UUID PK), `user_id` (FK), `ip_address`, `status`, `last_seen_at`, `updated_at` |
+| `event_log` | Authentication event audit trail | `id` (UUID PK), `host_id` (FK), `user_agent`, `status`, `description`, `created_at` |
 
 **Enums:**
 - `user_role`: `ADMIN`, `CUSTOMER`
 - `user_status`: `ACTIVE`, `INACTIVE`, `LOCKED`
-- `host_status`: `ACTIVE`, `INACTIVE`, `BANNED`
+- `host_status`: `AUTHORIZED`, `BANNED`
+- `event_log_status`: `INFO`, `APPROVED`, `SECURITY`, `WARNING`
 
 **Schema**: native PostgreSQL DDL (`V1__init.sql`, `V2__host.sql`, `V3__event_log.sql`), schema `jwt_template_app` (set via `.env`). Applied manually, not via Flyway. Password hashing: Argon2id (`Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`).
 
@@ -466,7 +490,7 @@ src/main/resources/
 - **IDs**: all UUIDs (`gen_random_uuid()`, `java.util.UUID`)
 - **Package**: `com.techindna.springbootjwttemplate`
 - **Layer naming**: J-prefix for JPA entities (`JUser`, `JHost`, `JEventLog`), domain records in `entity/`, Lombok `@Getter @Setter @NoArgsConstructor`
-- **Validation**: `DataValidator` pattern (void return, throws `UnprocessableContentException` (422)), not `@Valid`
+- **Validation**: `DataValidator` (format) + `AuthValidator`/`UserValidator`/`HostValidator` (rules) — void return, throw `UnprocessableContentException` (422), not `@Valid`
 - **Error handling**: custom exceptions → `GlobalExceptionHandler` → JSON `ErrorBody` (status, error, message, timestamp)
 - **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
 - **JWT auth**: claim-based — extract `userId` + `role` + `ip_address` from token, no `UserDetailsService`

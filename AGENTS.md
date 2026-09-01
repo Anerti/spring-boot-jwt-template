@@ -16,16 +16,16 @@ com.techindna.springbootjwttemplate
 │                                         #   - file:/mnt/geoip/GeoLite2-City.mmdb (NFS-mounted)
 ├── security/
 │   ├── SecurityConfig.java               # SecurityFilterChain, PasswordEncoder (Argon2id)
-│   ├── ResourcesAccessRules.java         # authorization: ADMIN→CUSTOMER; ADMIN→ADMIN denied; IP binding
 │   └── jwt/
 │       ├── JwtAuthenticationFilter.java   # JWT filter (extracts userId + role + ip from claims, no UserDetailsService)
 │       └── JwtTokenProvider.java          # JWT create/parse (HMAC-SHA, BASE64 secret, configurable TTL)
 ├── controller/
-│   ├── AuthController.java               # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link, POST /auth/change-password, POST /auth/change-email, POST /auth/unlock, POST /auth/logout
+│   ├── AuthController.java               # POST /auth/register, POST /auth/login, GET /auth/verification/{token}, POST /auth/resend-link, POST /auth/change-password, POST /auth/change-email, POST /auth/unlock
 │   ├── GeoIpController.java              # GET /geoip, GET /geoip/{ip}
 │   ├── SynController.java                # GET /syn
-│   └── UserController.java               # GET/PATCH/DELETE /users/{userId}
-│   └── HostController.java               # GET /users/{userId}/hosts
+│   ├── UserController.java               # GET/PATCH /users/{userId}
+│   ├── HostController.java               # GET /users/{userId}/hosts, GET /users/{userId}/hosts/{hostId}
+│   └── EventLogController.java           # GET /users/{userId}/event-log
 ├── dto/
 │   ├── LoginInput.java                   # login request body (username/email, password)
 │   ├── RegisterInput.java                # registration request body
@@ -36,6 +36,8 @@ com.techindna.springbootjwttemplate
 │   ├── MessageBody.java                  # { message } response
 │   ├── VerifyRegistrationResponse.java   # token + user response
 │   ├── HostListQuery.java                # host list filter + sort params
+│   ├── HostDetailResponse.java           # host detail response (with GeoIP data)
+│   ├── EventLogListQuery.java            # event log list filter + sort params
 │   ├── Meta.java                         # pagination metadata
 │   └── PaginatedResponse.java            # { data, meta } envelope
 ├── entity/
@@ -47,7 +49,8 @@ com.techindna.springbootjwttemplate
 │   └── enums/
 │       ├── UserRole.java                 # user role enum (ADMIN, CUSTOMER)
 │       ├── UserStatus.java               # account status enum (ACTIVE, INACTIVE, LOCKED)
-│       └── HostStatus.java               # host status enum (AUTHORIZED, BANNED)
+│       ├── HostStatus.java               # host status enum (AUTHORIZED, BANNED)
+│       └── EventLogStatus.java           # event log status enum (INFO, APPROVED, SECURITY, WARNING)
 ├── exception/
 │   ├── ErrorBody.java                    # error response DTO (status, error, message, timestamp)
 │   ├── GlobalExceptionHandler.java       # centralized error handling (@RestControllerAdvice)
@@ -62,12 +65,13 @@ com.techindna.springbootjwttemplate
 ├── mapper/
 │   ├── UserMapper.java                   # RegisterInput → JUser, JUser → User
 │   ├── GeoIpMapper.java                 # CityResponse → GeoIpResponse
-│   └── HostMapper.java                  # JHost → Host
+│   ├── HostMapper.java                  # JHost → Host, JHost + GeoIpResponse → HostDetailResponse
+│   └── EventLogMapper.java              # JEventLog → EventLog
 ├── repository/
 │   ├── AuthRepository.java               # JPA repository (findByEmail, findByUsername)
 │   ├── UserRepository.java               # JPA repository (CRUD)
-│   ├── HostRepository.java               # JPA repository (findByIpAddress, findByIpAddressAndUser_Id, search with filters)
-│   ├── LogRepository.java                # JPA repository (event log CRUD)
+│   ├── HostRepository.java               # JPA repository (findByIpAddress, findByIpAddressAndUser_Id, findByIdAndUser_Id, search with filters)
+│   ├── LogRepository.java                # JPA repository (event log CRUD + search with filters)
 │   └── model/
 │       ├── JUser.java                    # JPA entity (PostgreSQL "user" table)
 │       ├── JHost.java                    # JPA entity (PostgreSQL "host" table)
@@ -75,7 +79,9 @@ com.techindna.springbootjwttemplate
 ├── service/
 │   ├── AuthService.java                  # register + login + verification + resend + unlock + change-password/email + failed login tracking
 │   ├── UserService.java                  # getUser + updateUser (with ABACRulesService)
-│   ├── HostService.java                  # listHosts (paginated, filtered, ABAC-guarded)
+│   ├── HostService.java                  # listHosts + getHost (paginated, filtered, ABAC-guarded)
+│   ├── EventLogService.java              # listEventLogs (paginated, filtered, ABAC-guarded)
+│   ├── HostEventService.java             # recordHostAndCheckBan + logHostEvent
 │   ├── GeoIpService.java                 # IP lookup, client IP extraction
 │   ├── ABACRulesService.java             # grantAccessFor + enforceIpBinding (ABAC: self/ADMIN→CUSTOMER; ADMIN→ADMIN denied)
 │   ├── VerificationCodeStore.java        # Redis-based verification code storage (15 min TTL, key prefix "verification:")
@@ -118,13 +124,14 @@ src/main/resources/
 | Table    | Purpose                                   | Key columns                                                     |
 |----------|-------------------------------------------|-----------------------------------------------------------------|
 | `users`  | User accounts with JWT auth               | `id` (UUID PK), `username`, `email`, `password`, `role`, `status`, `verified` |
-| `host`   | IP address tracking per user              | `id` (UUID PK), `user_id` (FK), `ip_address` (unique), `status`, `last_seen_at`, `updated_at` |
+| `host`   | IP address tracking per user              | `id` (UUID PK), `user_id` (FK), `ip_address`, `status`, `last_seen_at`, `updated_at` |
 | `event_log` | Authentication event audit trail       | `id` (UUID PK), `host_id` (FK), `user_agent`, `status`, `description`, `created_at`    |
 
 **Enums:**
 - `user_role`: `ADMIN`, `CUSTOMER`
 - `user_status`: `ACTIVE`, `INACTIVE`, `LOCKED`
 - `host_status`: `AUTHORIZED`, `BANNED`
+- `event_log_status`: `INFO`, `APPROVED`, `SECURITY`, `WARNING`
 
 **Schema**: native PostgreSQL DDL (`V1__init.sql`, `V2__host.sql`, `V3__event_log.sql`), schema `jwt_template_app` (set via `.env`). Applied manually, not via Flyway. Password hashing: Argon2id (`Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`).
 
@@ -137,19 +144,19 @@ src/main/resources/
 | GET    | /auth/verification/{token}     | —    | Verify token → 200 with JWT token + user. Consumes tokens from all verification flows        |
 | POST   | /auth/login                    | —    | Login → 202, sends verification code by email                                                |
 | POST   | /auth/resend-link              | —    | Resend verification code → 202                                                              |
-| POST   | /auth/change-password          | JWT  | Request password change → 202                                                                 |
-| POST   | /auth/change-email             | JWT  | Request email change → 202                                                                     |
+| POST   | /auth/change-password          | JWT  | Change password immediately → 200, sends notification email                                  |
+| POST   | /auth/change-email             | JWT  | Request email change → 202, sends confirmation link to new address                           |
 | POST   | /auth/unlock                   | —    | Recovery: unlock a LOCKED account → 202                                                       |
-| POST   | /auth/logout                   | JWT  | Revoke current token (logout) → 200                                                           |
 | GET    | /users/{userId}/hosts          | JWT  | List hosts (paginated). ABAC-guarded: self-access or ADMIN→CUSTOMER; IP binding enforced |
-| GET    | /users/{userId}/hosts/{hostId} | JWT  | Get host by ID with GeoIP data *(spec'd, not yet implemented)*                              |
+| GET    | /users/{userId}/hosts/{hostId} | JWT  | Get host by ID with GeoIP data                                                              |
 | PATCH  | /users/{userId}/hosts/{hostId} | JWT  | Ban a host *(spec'd, not yet implemented)*                                                   |
+| GET    | /users/{userId}/event-log      | JWT  | List event logs (paginated). ABAC-guarded: self-access or ADMIN→CUSTOMER                    |
 | GET    | /geoip                         | —    | Resolve client geolocation (X-Forwarded-For)                                                 |
 | GET    | /geoip/{ip}                    | —    | Resolve IP geolocation (IPv4/IPv6)                                                           |
-| GET    | /users                         | JWT  | List users (paginated, admin only)                                                          |
+| GET    | /users                         | JWT  | List users (paginated, admin only) *(spec'd, not yet implemented)*                           |
 | GET    | /users/{userId}                | JWT  | Get user by ID                                                                              |
 | PATCH  | /users/{userId}                | JWT  | Update user                                                                                 |
-| DELETE | /users/{userId}                | JWT  | Delete user                                                                                 |
+| DELETE | /users/{userId}                | JWT  | Delete user *(spec'd, not yet implemented)*                                                  |
 
 ## Infrastructure
 
@@ -157,13 +164,13 @@ src/main/resources/
 - Native DDL in `src/main/resources/db/migration/` — applied manually, not via Flyway
 - Three migration files: `V1__init.sql` (user_role, user_status, user), `V2__host.sql` (host_status, host), `V3__event_log.sql` (event_log)
 - Schema: `jwt_template_app` (configured via `spring.jpa.properties.hibernate.default_schema` in `.env`)
-- DDL creates enum `user_role` (ADMIN, CUSTOMER), enum `user_status` (ACTIVE, INACTIVE, LOCKED), enum `host_status` (AUTHORIZED, BANNED)
-- Tables: `"user"` (UUID PK, `username`, `email`, `password`, `role`, `status`, `verified`), `host` (UUID PK, FK to user, unique `ip_address`, `status`, `last_seen_at`, `updated_at`), `event_log` (UUID PK, FK to host, `user_agent`, `status`, `description`, `created_at`)
+- DDL creates enum `user_role` (ADMIN, CUSTOMER), enum `user_status` (ACTIVE, INACTIVE, LOCKED), enum `host_status` (AUTHORIZED, BANNED), enum `event_log_status` (INFO, APPROVED, SECURITY, WARNING)
+- Tables: `"user"` (UUID PK, `username`, `email`, `password`, `role`, `status`, `verified`), `host` (UUID PK, FK to user, `ip_address`, `status`, `last_seen_at`, `updated_at`), `event_log` (UUID PK, FK to host, `user_agent`, `status`, `description`, `created_at`)
 - Password encoding: Argon2id via Spring Security's `Argon2PasswordEncoder`
 
 ### Redis
 - Two uses:
-  - **Verification code storage** (`VerificationCodeStore`): 15-minute TTL, key pattern `verification:{token}` → email address
+  - **Verification code storage** (`VerificationCodeStore`): 15-minute TTL, key pattern `verification:{token}` → email address. Also stores pending email for change-email flow (`pending_email:{token}` → new email)
   - **Failed-login tracking** (`FailedLoginTracker`): 12-hour TTL, key pattern `failed_logins:{userId}` → count. After 5 failures account is locked
 - Implemented using `StringRedisTemplate`
 - Compatible with Upstash (serverless) and self-hosted RESP-compatible Redis
@@ -255,14 +262,11 @@ Injected into services, called before operations. Rules:
 - **CUSTOMER → anything else**: denied
 - **IP binding**: if JWT carries `ip_address` claim, current request IP must match. Mismatch → 403 `Session IP does not match current request`
 
-### Logout (token revocation)
-`POST /auth/logout` (JWT) adds the caller's current token to a Redis blacklist (TTL = remaining token lifetime). `JwtAuthenticationFilter` rejects blacklisted tokens, so the token becomes unusable immediately and the revocation lapses when the token would have expired. The client should discard the token after a successful response.
-
 ### Failed login tracking & account lockout
 `FailedLoginTracker` (Redis): counts failed attempts per userId, key `failed_logins:{userId}`, TTL 12h. After **5 failed attempts** the account status is set to `LOCKED` (`UserStatus.LOCKED`) and login is rejected with 403 `Account locked`. On the 5th failure a notification email is sent via `AuthMailService.sendAccountLockedNotification()` using the `account-locked` template.
 
 ### Host tracking & event logging
-On each authentication attempt, `AuthService.recordHostAndCheckBan()` looks up or creates a `Host` record (ip_address + user_agent + user_id), checks if host is `BANNED` (→ 403), saves it, and logs the event to `event_log`. Host status is marked as "unreliable" in the code; only the BANNED check is enforced.
+`HostEventService.recordHostAndCheckBan()` looks up or creates a `Host` record (ip_address + user_agent + user_id), checks if host is `BANNED` (→ 403), saves it. `logHostEvent()` writes an `event_log` entry for every authentication event. Host status is marked as "unreliable" in the code; only the BANNED check is enforced.
 
 ## Verification flow
 
@@ -274,20 +278,20 @@ On each authentication attempt, `AuthService.recordHostAndCheckBan()` looks up o
 
 **Unlock** (account locked): `POST /auth/unlock` (public recovery, no JWT) → validate email → find LOCKED account (else 403, enumeration-safe) → check requesting host not banned → generate token → store in Redis → send unlock email → user clicks link → `GET /auth/verification/{token}` → validate → set status ACTIVE + reset failed-login counter → return JWT.
 
-**Change password**: `POST /auth/change-password` (JWT) → validate current credentials + new password (block reuse) → generate token → send confirmation email → click link → `GET /auth/verification/{token}` → update password → return JWT.
+**Change password**: `POST /auth/change-password` (JWT) → validate current credentials + new password (block reuse) → change password immediately → send notification email → return 200.
 
 **Change email**: `POST /auth/change-email` (JWT) → validate current credentials + new email → generate token → send confirmation email to new address → click link → `GET /auth/verification/{token}` → update email → return JWT.
 
 All verification flows consume tokens via the same `GET /auth/verification/{token}` endpoint. Redis key pattern: `verification:{token}` → email address, TTL 15 minutes.
 
-> **Implementation note**: register, login, resend, unlock, change-password, and change-email all generate tokens via `AuthMailService` and consume them through the single `GET /auth/verification/{token}` endpoint, which handles every token-consuming flow generically. `VerificationCodeStore.savePendingEmail(token, email)` carries the pending email for the change-email flow.
+> **Implementation note**: register, login, resend, unlock, and change-email generate tokens via `AuthMailService` and consume them through the single `GET /auth/verification/{token}` endpoint, which handles every token-consuming flow generically. `VerificationCodeStore.savePendingEmail(token, email)` carries the pending email for the change-email flow. Change-password is immediate (no token) — it sends a notification email after the change.
 
 ## Conventions
 
 - **IDs**: all UUIDs (`gen_random_uuid()`, `java.util.UUID`)
 - **Package**: `com.techindna.springbootjwttemplate`
 - **Layer naming**: J-prefix for JPA entities (`JUser`, `JHost`, `JEventLog`), domain records in `entity/`, Lombok `@Getter @Setter @NoArgsConstructor`
-- **Validation**: `DataValidator` (format) + `AuthValidator`/`UserValidator` (rules) — void return, throw `UnprocessableContentException` (422), not `@Valid`
+- **Validation**: `DataValidator` (format) + `AuthValidator`/`UserValidator`/`HostValidator` (rules) — void return, throw `UnprocessableContentException` (422), not `@Valid`
 - **Error handling**: custom exceptions → `GlobalExceptionHandler` → JSON `ErrorBody` (status, error, message, timestamp)
 - **Mail exceptions**: `MailSendException` (Spring) — handler returns generic message, logs detail
 - **JWT auth**: claim-based — extract `userId` + `role` + `ip_address` from token, no `UserDetailsService`

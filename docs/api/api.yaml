@@ -862,15 +862,22 @@ paths:
                 timestamp: 2026-07-20T15:00:00Z
 
   # ──────────────── Event log ────────────────
-  /event-log:
+  /users/{userId}/event-log:
     get:
       operationId: listEventLogs
       summary: List event log records (paginated)
-      description: Returns a paginated list of authentication event log records visible to the authenticated caller. Any authenticated user can call this endpoint, but without an explicit filter the list is scoped to the caller's own hosts — a non-admin caller cannot see event logs belonging to another user's hosts.
+      description: Returns a paginated list of authentication event log records for the specified user's hosts, visible to the authenticated caller. Any authenticated user can call this endpoint, but without an explicit filter the list is scoped to the caller's own hosts — a non-admin caller cannot see event logs belonging to another user's hosts.
       tags: [EventLog]
       security:
         - bearerAuth: []
       parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the user whose event logs to list
         - name: status
           in: query
           required: false
@@ -962,7 +969,7 @@ paths:
                 message: Page size must be between 1 and 100
                 timestamp: 2026-07-20T15:00:00Z
 
-  /event-log/{eventLogId}:
+  /users/{userId}/event-log/{eventLogId}:
     get:
       operationId: getEventLog
       summary: Get an event log record by ID
@@ -971,6 +978,13 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the user whose event log to retrieve
         - name: eventLogId
           in: path
           required: true
