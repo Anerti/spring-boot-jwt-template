@@ -4,6 +4,7 @@ import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
+import com.techindna.springbootjwttemplate.exception.http.BadRequestException;
 import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -31,17 +32,15 @@ public class AuthValidator {
 
     public void validateRegistration(RegisterInput request) {
         dataValidator.validateEmail("email", request.getEmail());
-
         dataValidator.checkPasswordSecurityLevel(request.getPassword());
-
         dataValidator.checkNullData("confirmPassword", request.getConfirmPassword());
+
         if (!request.getPassword().equals(request.getConfirmPassword())) {
-            throw new UnprocessableContentException("Passwords do not match");
+            throw new BadRequestException("Passwords do not match");
         }
 
         dataValidator.validateName("firstName", request.getFirstName());
         dataValidator.validateName("lastName", request.getLastName());
-
         dataValidator.validateUsername(request.getUsername());
     }
 

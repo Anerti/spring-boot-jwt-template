@@ -86,7 +86,7 @@ public class AuthMailService {
         emailService.sendMail(new EmailDetails(email, "Password Changed", "mail/password-change", variables));
     }
 
-    private void addClientData(Map<String, Object> variables, HttpServletRequest request) {
+    public void addClientData(Map<String, Object> variables, HttpServletRequest request) {
         String clientIp = geoIpService.extractClientIp(request);
         String userAgent = request.getHeader("User-Agent");
 

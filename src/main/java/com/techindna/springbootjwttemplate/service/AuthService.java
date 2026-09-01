@@ -5,7 +5,6 @@ import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
-import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.entity.User;
@@ -30,7 +29,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,31 +51,6 @@ public class AuthService {
     private final GeoIpService geoIpService;
     private final HostEventService hostEventService;
     private final FailedLoginTracker failedLoginTracker;
-
-    @Transactional
-    public MessageBody register(RegisterInput request, HttpServletRequest servletRequest) {
-        authValidator.validateRegistration(request);
-        String encodedPassword = passwordEncoder.encode(request.getPassword());
-        String email = request.getEmail().strip().toLowerCase();
-
-        try {
-            authRepository.saveAndFlush(userMapper.toEntity(request, encodedPassword));
-        } catch (DataIntegrityViolationException e) {
-            String constraint = e.getMostSpecificCause().getMessage();
-            if (constraint != null && constraint.contains("email")) {
-                throw new ConflictException("You cannot use this email address");
-            }
-            if (constraint != null && constraint.contains("username")) {
-                throw new ConflictException("You cannot use this username");
-            }
-            throw e;
-        }
-
-        authMailService.sendVerificationLink(email, request.getFirstName().strip(), request.getLastName().strip(),
-                request.getUsername().strip(), "Email Verification", "mail/verification", servletRequest);
-
-        return new MessageBody("An email has been sent to verify your account");
-    }
 
     @Transactional(noRollbackFor = {ForbiddenException.class, UnauthorizedException.class})
     public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
