@@ -11,6 +11,7 @@ import com.techindna.springbootjwttemplate.repository.model.JUser;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +42,7 @@ public class HostEventService {
         return hostRepository.saveAndFlush(host);
     }
 
+    @Async("eventLogExecutor")
     @Transactional
     public void logHostEvent(JHost host, String description, EventLogStatus status, HttpServletRequest servletRequest) {
         String rawUserAgent = servletRequest.getHeader("User-Agent");
