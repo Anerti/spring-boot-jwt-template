@@ -12,15 +12,11 @@ import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,15 +46,7 @@ public class EventLogService {
         JUser juser = abacRulesService.grantAccessFor(userId, request);
         JHost userHost = hostEventService.recordHostAndCheckBan(juser, request);
 
-        page = page < 1 ? defaultPage : page;
-        size = (size < 1 || size > 100) ? defaultSize : size;
-
-        String sortByCreatedAt = query.sortByCreatedAt() != null ? query.sortByCreatedAt() : "desc";
-
-        Sort sort = Sort.by(
-                "asc".equalsIgnoreCase(sortByCreatedAt) ? Sort.Direction.ASC : Sort.Direction.DESC,
-                "createdAt");
-        Pageable pageable = PageRequest.of(page - 1, size, sort);
+        var pageable = eventLogMapper.toPageable(query, page, size, defaultPage, defaultSize);
 
         Instant startDate = query.startDate() != null ? query.startDate() : Instant.now();
         Instant endDate = query.endDate() != null ? query.endDate() : Instant.now();
@@ -69,7 +57,7 @@ public class EventLogService {
         hostEventService.logHostEvent(userHost, "EVENT_LOG_LIST_REQUESTED", EventLogStatus.INFO, request);
         return new PaginatedResponse<>(
                 data.isEmpty() ? null : data,
-                new Meta(page, size, resultPage.getTotalElements())
+                new Meta(pageable.getPageNumber() + 1, pageable.getPageSize(), resultPage.getTotalElements())
         );
     }
 }
