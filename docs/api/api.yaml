@@ -128,7 +128,11 @@ paths:
     post:
       operationId: login
       summary: Authenticate and request a verification link
-      description: Validates credentials (username or email + password), generates a UUID verification token stored in Redis, and sends a verification link by email. The token expires after 15 minutes. Complete login via GET /auth/verification/{token}.
+      description: >-
+        Validates credentials (username or email + password), records the client's host and
+        rejects banned hosts, generates a UUID verification token stored in Redis, and sends a
+        verification link by email. The token expires after 15 minutes. Complete login via
+        GET /auth/verification/{token}.
       tags: [Auth]
       requestBody:
         required: true
@@ -151,22 +155,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 422
-                error: Unprocessable Entity
-                message: Username or email is required
-                timestamp: 2026-07-20T15:00:00Z
+              examples:
+                noIdentifier:
+                  summary: Neither username nor email provided
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: Username or email is required and cannot be blank
+                    timestamp: 2026-07-20T15:00:00Z
+                invalidEmail:
+                  summary: Email format invalid
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: Email not-an-email is not valid
+                    timestamp: 2026-07-20T15:00:00Z
+                invalidUsername:
+                  summary: Username format invalid
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: Username a is invalid
+                    timestamp: 2026-07-20T15:00:00Z
+                blankPassword:
+                  summary: Password missing or blank
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: password is required and cannot be blank
+                    timestamp: 2026-07-20T15:00:00Z
         '401':
           description: Invalid credentials
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 401
-                error: Unauthorized
-                message: Invalid credentials
-                timestamp: 2026-07-20T15:00:00Z
+              examples:
+                wrongPassword:
+                  summary: Unknown user or wrong password
+                  value:
+                    status: 401
+                    error: Unauthorized
+                    message: Invalid credentials. 4 attempt(s) left
+                    timestamp: 2026-07-20T15:00:00Z
         '403':
           description: Business rule violation
           content:
@@ -187,6 +218,13 @@ paths:
                     status: 403
                     error: Forbidden
                     message: Account has not been verified
+                    timestamp: 2026-07-20T15:00:00Z
+                hostBanned:
+                  summary: Client's host is banned from this account
+                  value:
+                    status: 403
+                    error: Forbidden
+                    message: Host 203.0.113.42 is banned from accessing this account
                     timestamp: 2026-07-20T15:00:00Z
 
   /auth/resend-link:
