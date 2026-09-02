@@ -80,21 +80,16 @@ public class AuthService {
             throw e;
         }
 
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(email, token);
-
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+        String token = generateVerificationToken(email);
 
         Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("verificationUrl", verificationUrl);
+        variables.put("verificationUrl", verificationUrl(token));
         variables.put("firstName", request.getFirstName().strip());
         variables.put("lastName", request.getLastName().strip());
         variables.put("username", request.getUsername().strip());
         variables.put("email", email);
 
-        authMailService.addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(email, "Email Verification", "mail/verification", variables));
+        sendTemplatedEmail(email, "Email Verification", "mail/verification", variables, servletRequest);
 
         return new MessageBody("An email has been sent to verify your account");
     }
@@ -111,29 +106,17 @@ public class AuthService {
 
         JHost host = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
 
-        if (UserStatus.LOCKED == jUser.getStatus()) {
-            hostEventService.logHostEvent(host, "LOGIN_FAILED : account locked", EventLogStatus.SECURITY, servletRequest);
-            throw new ForbiddenException("Account locked");
-        }
+        requireActiveVerifiedAccount(host, jUser, "LOGIN", servletRequest);
 
-        if (!jUser.getVerified()) {
-            hostEventService.logHostEvent(host, "LOGIN_FAILED : unverified account", EventLogStatus.SECURITY, servletRequest);
-            throw new ForbiddenException("Account has not been verified");
-        }
-
-        String token = UUID.randomUUID().toString();
+        String token = generateVerificationToken(jUser.getEmail());
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
             hostEventService.logHostEvent(host, "LOGIN_SUCCESS : verification link sent", EventLogStatus.APPROVED, servletRequest);
-            verificationCodeStore.saveToken(jUser.getEmail(), token);
-            String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
 
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", jUser.getFirstName());
-            variables.put("verificationUrl", verificationUrl);
-            variables.put("email", jUser.getEmail());
-            authMailService.addClientData(variables, servletRequest);
+            variables.put("verificationUrl", verificationUrl(token));
 
-            emailService.sendMail(new EmailDetails(jUser.getEmail(), "Login Verification", "mail/login-verification", variables));
+            sendTemplatedEmail(jUser.getEmail(), "Login Verification", "mail/login-verification", variables, servletRequest);
             return new MessageBody("A verification link has been sent to your email");
         }
 
@@ -147,9 +130,8 @@ public class AuthService {
 
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", jUser.getFirstName());
-            authMailService.addClientData(variables, servletRequest);
 
-            emailService.sendMail(new EmailDetails(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables));
+            sendTemplatedEmail(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables, servletRequest);
             throw new ForbiddenException("Account has been locked due to multiple failed logins");
         }
 
@@ -158,22 +140,12 @@ public class AuthService {
 
     @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
     public MessageBody changePassword(ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
-        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
-        JUser jUser = authRepository.findById(UUID.fromString(userId))
-                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+        JUser jUser = getAuthenticatedUser();
 
         abacRulesService.enforceIpBinding(auth, servletRequest);
         JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
 
-        if (UserStatus.LOCKED == jUser.getStatus()) {
-            hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : account locked", EventLogStatus.SECURITY, servletRequest);
-            throw new ForbiddenException("Account locked");
-        }
-
-        if (!jUser.getVerified()) {
-            hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : account not verified", EventLogStatus.SECURITY, servletRequest);
-            throw new ForbiddenException("Account has not been verified");
-        }
+        requireActiveVerifiedAccount(userHost, jUser, "PASSWORD_CHANGE", servletRequest);
 
         authValidator.validateChangePassword(request);
 
@@ -193,18 +165,15 @@ public class AuthService {
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("firstName", jUser.getFirstName());
-        authMailService.addClientData(variables, servletRequest);
 
-        emailService.sendMail(new EmailDetails(jUser.getEmail(), "Password Changed", "mail/password-change", variables));
+        sendTemplatedEmail(jUser.getEmail(), "Password Changed", "mail/password-change", variables, servletRequest);
 
         return new MessageBody("Password changed successfully");
     }
 
     @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
     public MessageBody changeEmail(ChangeEmailInput request, HttpServletRequest servletRequest, Authentication auth) {
-        String userId = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
-        JUser jUser = authRepository.findById(UUID.fromString(userId))
-                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+        JUser jUser = getAuthenticatedUser();
 
         abacRulesService.enforceIpBinding(auth, servletRequest);
         JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
@@ -227,18 +196,14 @@ public class AuthService {
         }
 
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            String token = UUID.randomUUID().toString();
-            verificationCodeStore.saveToken(jUser.getEmail(), token);
+            String token = generateVerificationToken(jUser.getEmail());
             verificationCodeStore.savePendingEmail(token, normalizedNewEmail);
 
-            String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
-
             Map<String, Object> variables = new HashMap<>();
-            variables.put("verificationUrl", verificationUrl);
+            variables.put("verificationUrl", verificationUrl(token));
             variables.put("firstName", jUser.getFirstName());
-            authMailService.addClientData(variables, servletRequest);
 
-            emailService.sendMail(new EmailDetails(normalizedNewEmail, "Confirm your new email address", "mail/change-email", variables));
+            sendTemplatedEmail(normalizedNewEmail, "Confirm your new email address", "mail/change-email", variables, servletRequest);
 
             hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_PENDING : confirmation sent to new address", EventLogStatus.INFO, servletRequest);
             return new MessageBody("A verification link has been sent to your new email address");
@@ -261,16 +226,13 @@ public class AuthService {
             throw new ForbiddenException("Account not locked");
         }
 
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(jUser.getEmail(), token);
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+        String token = generateVerificationToken(jUser.getEmail());
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("firstName", jUser.getFirstName());
-        variables.put("verificationUrl", verificationUrl);
-        authMailService.addClientData(variables, servletRequest);
+        variables.put("verificationUrl", verificationUrl(token));
 
-        emailService.sendMail(new EmailDetails(jUser.getEmail(), "Account Unlock", "mail/unlock-account", variables));
+        sendTemplatedEmail(jUser.getEmail(), "Account Unlock", "mail/unlock-account", variables, servletRequest);
 
         hostEventService.logHostEvent(userHost, "UNLOCK_REQUESTED : verification email sent", EventLogStatus.INFO, servletRequest);
         return new MessageBody("A verification link has been sent to your email to unlock your account");
@@ -330,20 +292,50 @@ public class AuthService {
             throw new ForbiddenException("No pending verification");
         }
 
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(normalizedEmail, token);
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+        String token = generateVerificationToken(normalizedEmail);
 
         Map<String, Object> variables = new HashMap<>();
-        variables.put("verificationUrl", verificationUrl);
+        variables.put("verificationUrl", verificationUrl(token));
         variables.put("firstName", jUser.getFirstName());
         variables.put("lastName", jUser.getLastName());
         variables.put("username", jUser.getUsername());
         variables.put("email", normalizedEmail);
-        authMailService.addClientData(variables, servletRequest);
 
-        emailService.sendMail(new EmailDetails(normalizedEmail, "Email Verification", "mail/verification", variables));
+        sendTemplatedEmail(normalizedEmail, "Email Verification", "mail/verification", variables, servletRequest);
 
         return new MessageBody("A verification link has been sent to your email");
+    }
+
+    private String generateVerificationToken(String email) {
+        String token = UUID.randomUUID().toString();
+        verificationCodeStore.saveToken(email, token);
+        return token;
+    }
+
+    private String verificationUrl(String token) {
+        return String.format("%s/auth/verification/%s", baseUrl, token);
+    }
+
+    private void sendTemplatedEmail(String email, String subject, String template,
+                                    Map<String, Object> vars, HttpServletRequest request) {
+        authMailService.addClientData(vars, request);
+        emailService.sendMail(new EmailDetails(email, subject, template, vars));
+    }
+
+    private void requireActiveVerifiedAccount(JHost host, JUser user, String op, HttpServletRequest request) {
+        if (UserStatus.LOCKED == user.getStatus()) {
+            hostEventService.logHostEvent(host, op + "_FAILED : account locked", EventLogStatus.SECURITY, request);
+            throw new ForbiddenException("Account locked");
+        }
+        if (!user.getVerified()) {
+            hostEventService.logHostEvent(host, op + "_FAILED : unverified account", EventLogStatus.SECURITY, request);
+            throw new ForbiddenException("Account has not been verified");
+        }
+    }
+
+    private JUser getAuthenticatedUser() {
+        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
+        return authRepository.findById(UUID.fromString(userId))
+                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
     }
 }
