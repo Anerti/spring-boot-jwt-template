@@ -48,19 +48,6 @@ public class AuthMailService {
         emailService.sendMail(new EmailDetails(email, subject, template, variables));
     }
 
-    public void sendAccountLockedNotification(String email, String firstName, HttpServletRequest servletRequest) {
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(email, token);
-        String unlockUrl = String.format("%s/auth/verification/%s", baseUrl, token);
-
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("firstName", firstName);
-        variables.put("unlockUrl", unlockUrl);
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(email, "Security Alert: Your account has been locked", "mail/account-locked", variables));
-    }
-
     public void sendChangeEmailConfirmation(String email, String firstName, String newEmail, HttpServletRequest servletRequest) {
         String token = UUID.randomUUID().toString();
         verificationCodeStore.saveToken(email, token);
