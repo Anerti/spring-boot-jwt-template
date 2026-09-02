@@ -12,6 +12,7 @@ import com.techindna.springbootjwttemplate.service.auth.ChangeEmailService;
 import com.techindna.springbootjwttemplate.service.auth.ChangePasswordService;
 import com.techindna.springbootjwttemplate.service.auth.LoginService;
 import com.techindna.springbootjwttemplate.service.auth.RegisterService;
+import com.techindna.springbootjwttemplate.service.auth.UnlockAccountService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -37,6 +38,7 @@ public class AuthController {
     private final LoginService loginService;
     private final ChangePasswordService changePasswordService;
     private final ChangeEmailService changeEmailService;
+    private final UnlockAccountService unlockAccountService;
 
     @PostMapping("/register")
     public ResponseEntity<MessageBody> register(@RequestBody RegisterInput request, HttpServletRequest servletRequest) {
@@ -79,6 +81,6 @@ public class AuthController {
     public ResponseEntity<MessageBody> unlockAccount(
             @RequestBody UnlockAccountInput request, HttpServletRequest servletRequest) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(authService.unlockAccount(request, servletRequest));
+                .body(unlockAccountService.unlockAccount(request, servletRequest));
     }
 }
