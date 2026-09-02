@@ -8,6 +8,7 @@ import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.service.AuthService;
+import com.techindna.springbootjwttemplate.service.auth.LoginService;
 import com.techindna.springbootjwttemplate.service.auth.RegisterService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final RegisterService registerService;
+    private final LoginService loginService;
 
     @PostMapping("/register")
     public ResponseEntity<MessageBody> register(@RequestBody RegisterInput request, HttpServletRequest servletRequest) {
@@ -39,7 +41,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<MessageBody> login(@RequestBody LoginInput request, HttpServletRequest servletRequest) {
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(authService.login(request, servletRequest));
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(loginService.login(request, servletRequest));
     }
 
     @GetMapping("/verification/{token}")
