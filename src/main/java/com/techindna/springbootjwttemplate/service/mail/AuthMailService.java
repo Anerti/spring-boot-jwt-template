@@ -48,23 +48,6 @@ public class AuthMailService {
         emailService.sendMail(new EmailDetails(email, subject, template, variables));
     }
 
-    public void sendChangeEmailConfirmation(String email, String firstName, String newEmail, HttpServletRequest servletRequest) {
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(email, token);
-        verificationCodeStore.savePendingEmail(token, newEmail);
-
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
-
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("verificationUrl", verificationUrl);
-        variables.put("firstName", firstName);
-        variables.put("email", newEmail);
-        variables.put("oldEmail", email);
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(newEmail, "Confirm your new email address", "mail/change-email", variables));
-    }
-
     public void addClientData(Map<String, Object> variables, HttpServletRequest request) {
         String clientIp = geoIpService.extractClientIp(request);
         String userAgent = request.getHeader("User-Agent");
