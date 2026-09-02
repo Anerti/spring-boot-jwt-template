@@ -121,10 +121,19 @@ public class AuthService {
             throw new ForbiddenException("Account has not been verified");
         }
 
+        String token = UUID.randomUUID().toString();
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
             hostEventService.logHostEvent(host, "LOGIN_SUCCESS : verification link sent", EventLogStatus.APPROVED, servletRequest);
-            authMailService.sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
-                    jUser.getUsername(), "Login Verification", "mail/login-verification", servletRequest);
+            verificationCodeStore.saveToken(jUser.getEmail(), token);
+            String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("firstName", jUser.getFirstName());
+            variables.put("verificationUrl", verificationUrl);
+            variables.put("email", jUser.getEmail());
+            authMailService.addClientData(variables, servletRequest);
+
+            emailService.sendMail(new EmailDetails(jUser.getEmail(), "Login Verification", "mail/login-verification", variables));
             return new MessageBody("A verification link has been sent to your email");
         }
 
@@ -135,7 +144,12 @@ public class AuthService {
             jUser.setStatus(UserStatus.LOCKED);
             authRepository.save(jUser);
             hostEventService.logHostEvent(host, "ACCOUNT_LOCKED : repeated failed login attempts", EventLogStatus.SECURITY, servletRequest);
-            authMailService.sendAccountLockedNotification(jUser.getEmail(), jUser.getFirstName(), servletRequest);
+
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("firstName", jUser.getFirstName());
+            authMailService.addClientData(variables, servletRequest);
+
+            emailService.sendMail(new EmailDetails(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables));
             throw new ForbiddenException("Account has been locked due to multiple failed logins");
         }
 
