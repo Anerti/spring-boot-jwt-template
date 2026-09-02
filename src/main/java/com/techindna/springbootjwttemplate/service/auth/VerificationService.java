@@ -46,6 +46,18 @@ public class VerificationService {
         JHost host = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
         hostEventService.logHostEvent(host, "VERIFY_SUCCESS : token accepted", EventLogStatus.APPROVED, servletRequest);
 
+        applyVerificationFlows(jUser, host, tokenStr, servletRequest);
+
+        verificationCodeStore.deleteByToken(tokenStr);
+
+        String clientIp = geoIpService.extractClientIp(servletRequest);
+        String jwtToken = jwtTokenProvider.generateToken(jUser.getId().toString(), jUser.getRole().name(), clientIp);
+        User user = userMapper.toDomain(jUser);
+
+        return new VerifyRegistrationResponse(jwtToken, user);
+    }
+
+    private void applyVerificationFlows(JUser jUser, JHost host, String tokenStr, HttpServletRequest servletRequest) {
         if (!jUser.getVerified()) {
             jUser.setVerified(true);
             authRepository.save(jUser);
@@ -66,13 +78,5 @@ public class VerificationService {
             hostEventService.logHostEvent(host, "EMAIL_CHANGE_SUCCEEDED", EventLogStatus.APPROVED, servletRequest);
             verificationCodeStore.deletePendingEmailByToken(tokenStr);
         }
-
-        verificationCodeStore.deleteByToken(tokenStr);
-
-        String clientIp = geoIpService.extractClientIp(servletRequest);
-        String jwtToken = jwtTokenProvider.generateToken(jUser.getId().toString(), jUser.getRole().name(), clientIp);
-        User user = userMapper.toDomain(jUser);
-
-        return new VerifyRegistrationResponse(jwtToken, user);
     }
 }
