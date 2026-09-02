@@ -1,7 +1,6 @@
 package com.techindna.springbootjwttemplate.service;
 
 import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
-import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
@@ -23,7 +22,6 @@ import com.techindna.springbootjwttemplate.validator.DataValidator;
 import com.techindna.springbootjwttemplate.validator.AuthValidator;
 import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -50,41 +48,8 @@ public class AuthService {
     private final AuthMailService authMailService;
 
     @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
-    public MessageBody changePassword(ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
-        JUser jUser = getAuthenticatedUser();
-
-        abacRulesService.enforceIpBinding(auth, servletRequest);
-        JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
-
-        authMailService.requireActiveVerifiedAccount(userHost, jUser, "PASSWORD_CHANGE", servletRequest);
-
-        authValidator.validateChangePassword(request);
-
-        if (!passwordEncoder.matches(request.getOldPassword(), jUser.getPassword())) {
-            hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : wrong current password", EventLogStatus.SECURITY, servletRequest);
-            throw new UnauthorizedException("Invalid credentials");
-        }
-
-        if (passwordEncoder.matches(request.getNewPassword(), jUser.getPassword())) {
-            hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_FAILED : new password matches current", EventLogStatus.WARNING, servletRequest);
-            throw new UnprocessableContentException("Cannot use the current password");
-        }
-
-        jUser.setPassword(passwordEncoder.encode(request.getNewPassword()));
-        authRepository.save(jUser);
-        hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_SUCCEEDED", EventLogStatus.APPROVED, servletRequest);
-
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("firstName", jUser.getFirstName());
-
-        authMailService.sendTemplatedEmail(jUser.getEmail(), "Password Changed", "mail/password-change", variables, servletRequest);
-
-        return new MessageBody("Password changed successfully");
-    }
-
-    @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
     public MessageBody changeEmail(ChangeEmailInput request, HttpServletRequest servletRequest, Authentication auth) {
-        JUser jUser = getAuthenticatedUser();
+        JUser jUser = authMailService.getAuthenticatedUser();
 
         abacRulesService.enforceIpBinding(auth, servletRequest);
         JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
@@ -215,11 +180,5 @@ public class AuthService {
         authMailService.sendTemplatedEmail(normalizedEmail, "Email Verification", "mail/verification", variables, servletRequest);
 
         return new MessageBody("A verification link has been sent to your email");
-    }
-
-    private JUser getAuthenticatedUser() {
-        String userId = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
-        return authRepository.findById(UUID.fromString(userId))
-                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
     }
 }
