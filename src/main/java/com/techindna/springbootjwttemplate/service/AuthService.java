@@ -2,7 +2,6 @@ package com.techindna.springbootjwttemplate.service;
 
 import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
-import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
@@ -37,8 +36,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
-
     private final AuthRepository authRepository;
     private final ABACRulesService abacRulesService;
     private final UserMapper userMapper;
@@ -52,50 +49,6 @@ public class AuthService {
     private final FailedLoginTracker failedLoginTracker;
     private final AuthMailService authMailService;
 
-    @Transactional(noRollbackFor = {ForbiddenException.class, UnauthorizedException.class})
-    public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
-        authValidator.validateLogin(request);
-
-        JUser jUser = request.getEmail() != null && !request.getEmail().isBlank() ?
-                authRepository.findByEmail(request.getEmail().strip().toLowerCase())
-                        .orElseThrow(() -> new UnauthorizedException("Invalid credentials")) :
-                authRepository.findByUsername(request.getUsername().strip())
-                        .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
-
-        JHost host = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
-
-        requireActiveVerifiedAccount(host, jUser, "LOGIN", servletRequest);
-
-        String token = authMailService.generateVerificationToken(jUser.getEmail());
-        if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            hostEventService.logHostEvent(host, "LOGIN_SUCCESS : verification link sent", EventLogStatus.APPROVED, servletRequest);
-
-            Map<String, Object> variables = new HashMap<>();
-            variables.put("firstName", jUser.getFirstName());
-            variables.put("verificationUrl", authMailService.verificationUrl(token));
-
-            authMailService.sendTemplatedEmail(jUser.getEmail(), "Login Verification", "mail/login-verification", variables, servletRequest);
-            return new MessageBody("A verification link has been sent to your email");
-        }
-
-        int failedCount = failedLoginTracker.increment(jUser.getId());
-        hostEventService.logHostEvent(host, "LOGIN_FAILED : invalid credentials", EventLogStatus.SECURITY, servletRequest);
-
-        if (failedCount == MAX_FAILED_LOGIN_ATTEMPTS) {
-            jUser.setStatus(UserStatus.LOCKED);
-            authRepository.save(jUser);
-            hostEventService.logHostEvent(host, "ACCOUNT_LOCKED : repeated failed login attempts", EventLogStatus.SECURITY, servletRequest);
-
-            Map<String, Object> variables = new HashMap<>();
-            variables.put("firstName", jUser.getFirstName());
-
-            authMailService.sendTemplatedEmail(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables, servletRequest);
-            throw new ForbiddenException("Account has been locked due to multiple failed logins");
-        }
-
-        throw new UnauthorizedException(String.format("Invalid credentials. %s attempt(s) left", MAX_FAILED_LOGIN_ATTEMPTS - failedCount));
-    }
-
     @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
     public MessageBody changePassword(ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
         JUser jUser = getAuthenticatedUser();
@@ -103,7 +56,7 @@ public class AuthService {
         abacRulesService.enforceIpBinding(auth, servletRequest);
         JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
 
-        requireActiveVerifiedAccount(userHost, jUser, "PASSWORD_CHANGE", servletRequest);
+        authMailService.requireActiveVerifiedAccount(userHost, jUser, "PASSWORD_CHANGE", servletRequest);
 
         authValidator.validateChangePassword(request);
 
@@ -262,17 +215,6 @@ public class AuthService {
         authMailService.sendTemplatedEmail(normalizedEmail, "Email Verification", "mail/verification", variables, servletRequest);
 
         return new MessageBody("A verification link has been sent to your email");
-    }
-
-    private void requireActiveVerifiedAccount(JHost host, JUser user, String op, HttpServletRequest request) {
-        if (UserStatus.LOCKED == user.getStatus()) {
-            hostEventService.logHostEvent(host, op + "_FAILED : account locked", EventLogStatus.SECURITY, request);
-            throw new ForbiddenException("Account locked");
-        }
-        if (!user.getVerified()) {
-            hostEventService.logHostEvent(host, op + "_FAILED : unverified account", EventLogStatus.SECURITY, request);
-            throw new ForbiddenException("Account has not been verified");
-        }
     }
 
     private JUser getAuthenticatedUser() {
