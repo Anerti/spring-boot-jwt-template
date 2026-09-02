@@ -13,6 +13,7 @@ import com.techindna.springbootjwttemplate.service.auth.ChangePasswordService;
 import com.techindna.springbootjwttemplate.service.auth.LoginService;
 import com.techindna.springbootjwttemplate.service.auth.RegisterService;
 import com.techindna.springbootjwttemplate.service.auth.UnlockAccountService;
+import com.techindna.springbootjwttemplate.service.auth.VerificationService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,7 @@ public class AuthController {
     private final ChangePasswordService changePasswordService;
     private final ChangeEmailService changeEmailService;
     private final UnlockAccountService unlockAccountService;
+    private final VerificationService verificationService;
 
     @PostMapping("/register")
     public ResponseEntity<MessageBody> register(@RequestBody RegisterInput request, HttpServletRequest servletRequest) {
@@ -53,7 +55,7 @@ public class AuthController {
     @GetMapping("/verification/{token}")
     public ResponseEntity<VerifyRegistrationResponse> verify(
             @PathVariable UUID token, HttpServletRequest servletRequest) {
-        return ResponseEntity.status(HttpStatus.OK).body(authService.verify(token, servletRequest));
+        return ResponseEntity.status(HttpStatus.OK).body(verificationService.verify(token, servletRequest));
     }
 
     @PostMapping("/resend-link")
