@@ -1,20 +1,15 @@
 package com.techindna.springbootjwttemplate.service.mail;
 
 import com.techindna.springbootjwttemplate.entity.GeoIpResponse;
-import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.service.GeoIpService;
-import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -23,30 +18,7 @@ public class AuthMailService {
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
 
-    private final EmailService emailService;
-    private final VerificationCodeStore verificationCodeStore;
     private final GeoIpService geoIpService;
-
-    @Value("${app.base-url}")
-    private String baseUrl;
-
-    public void sendVerificationLink(String email, String firstName, String lastName,
-            String username, String subject, String template, HttpServletRequest servletRequest) {
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(email, token);
-
-        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
-
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("verificationUrl", verificationUrl);
-        variables.put("firstName", firstName);
-        variables.put("lastName", lastName);
-        variables.put("username", username);
-        variables.put("email", email);
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(email, subject, template, variables));
-    }
 
     public void addClientData(Map<String, Object> variables, HttpServletRequest request) {
         String clientIp = geoIpService.extractClientIp(request);
