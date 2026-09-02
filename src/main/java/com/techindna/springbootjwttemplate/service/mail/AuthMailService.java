@@ -65,14 +65,6 @@ public class AuthMailService {
         emailService.sendMail(new EmailDetails(newEmail, "Confirm your new email address", "mail/change-email", variables));
     }
 
-    public void sendPasswordChangedNotification(String email, String firstName, HttpServletRequest servletRequest) {
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("firstName", firstName);
-        addClientData(variables, servletRequest);
-
-        emailService.sendMail(new EmailDetails(email, "Password Changed", "mail/password-change", variables));
-    }
-
     public void addClientData(Map<String, Object> variables, HttpServletRequest request) {
         String clientIp = geoIpService.extractClientIp(request);
         String userAgent = request.getHeader("User-Agent");
