@@ -8,6 +8,7 @@ import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.service.AuthService;
+import com.techindna.springbootjwttemplate.service.auth.ChangePasswordService;
 import com.techindna.springbootjwttemplate.service.auth.LoginService;
 import com.techindna.springbootjwttemplate.service.auth.RegisterService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,6 +34,7 @@ public class AuthController {
     private final AuthService authService;
     private final RegisterService registerService;
     private final LoginService loginService;
+    private final ChangePasswordService changePasswordService;
 
     @PostMapping("/register")
     public ResponseEntity<MessageBody> register(@RequestBody RegisterInput request, HttpServletRequest servletRequest) {
@@ -61,7 +63,7 @@ public class AuthController {
     public ResponseEntity<MessageBody> changePassword(
             @RequestBody ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(authService.changePassword(request, servletRequest, auth));
+                .body(changePasswordService.changePassword(request, servletRequest, auth));
     }
 
     @PostMapping("/change-email")
