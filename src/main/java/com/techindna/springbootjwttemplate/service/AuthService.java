@@ -1,16 +1,13 @@
 package com.techindna.springbootjwttemplate.service;
 
-import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.entity.User;
 import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
 import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
-import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
-import com.techindna.springbootjwttemplate.exception.http.UnprocessableContentException;
 import com.techindna.springbootjwttemplate.mapper.UserMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
@@ -19,14 +16,11 @@ import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
-import com.techindna.springbootjwttemplate.validator.AuthValidator;
 import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
-import org.springframework.security.core.Authentication;
 
 import java.util.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,59 +29,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private final AuthRepository authRepository;
-    private final ABACRulesService abacRulesService;
     private final UserMapper userMapper;
-    private final AuthValidator authValidator;
     private final DataValidator dataValidator;
-    private final PasswordEncoder passwordEncoder;
     private final VerificationCodeStore verificationCodeStore;
     private final JwtTokenProvider jwtTokenProvider;
     private final GeoIpService geoIpService;
     private final HostEventService hostEventService;
     private final FailedLoginTracker failedLoginTracker;
     private final AuthMailService authMailService;
-
-    @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
-    public MessageBody changeEmail(ChangeEmailInput request, HttpServletRequest servletRequest, Authentication auth) {
-        JUser jUser = authMailService.getAuthenticatedUser();
-
-        abacRulesService.enforceIpBinding(auth, servletRequest);
-        JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
-
-        if (UserStatus.LOCKED == jUser.getStatus()) {
-            hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_FAILED : account locked", EventLogStatus.SECURITY, servletRequest);
-            throw new ForbiddenException("Account locked");
-        }
-
-        authValidator.validateChangeEmail(request);
-
-        String normalizedNewEmail = request.getNewEmail().strip().toLowerCase();
-        if (normalizedNewEmail.equals(jUser.getEmail())) {
-            hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_FAILED : new email matches current", EventLogStatus.WARNING, servletRequest);
-            throw new UnprocessableContentException("The new email must be different from the current email");
-        }
-
-        if (authRepository.findByEmail(normalizedNewEmail).isPresent()) {
-            throw new ConflictException("Cannot use this email");
-        }
-
-        if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            String token = authMailService.generateVerificationToken(jUser.getEmail());
-            verificationCodeStore.savePendingEmail(token, normalizedNewEmail);
-
-            Map<String, Object> variables = new HashMap<>();
-            variables.put("verificationUrl", authMailService.verificationUrl(token));
-            variables.put("firstName", jUser.getFirstName());
-
-            authMailService.sendTemplatedEmail(normalizedNewEmail, "Confirm your new email address", "mail/change-email", variables, servletRequest);
-
-            hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_PENDING : confirmation sent to new address", EventLogStatus.INFO, servletRequest);
-            return new MessageBody("A verification link has been sent to your new email address");
-        }
-
-        hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_FAILED : wrong current password", EventLogStatus.SECURITY, servletRequest);
-        throw new UnauthorizedException("Invalid credentials");
-    }
 
     @Transactional
     public MessageBody unlockAccount(UnlockAccountInput request, HttpServletRequest servletRequest) {
