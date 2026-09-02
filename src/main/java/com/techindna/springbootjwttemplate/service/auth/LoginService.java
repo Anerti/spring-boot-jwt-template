@@ -58,15 +58,7 @@ public class LoginService {
         hostEventService.logHostEvent(host, "LOGIN_FAILED : invalid credentials", EventLogStatus.SECURITY, servletRequest);
 
         if (failedCount == MAX_FAILED_LOGIN_ATTEMPTS) {
-            jUser.setStatus(UserStatus.LOCKED);
-            authRepository.save(jUser);
-            hostEventService.logHostEvent(host, "ACCOUNT_LOCKED : repeated failed login attempts", EventLogStatus.SECURITY, servletRequest);
-
-            Map<String, Object> variables = new HashMap<>();
-            variables.put("firstName", jUser.getFirstName());
-
-            authMailService.sendTemplatedEmail(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables, servletRequest);
-            throw new ForbiddenException("Account has been locked due to multiple failed logins");
+            lockAccount(jUser, host, servletRequest);
         }
 
         throw new UnauthorizedException(String.format("Invalid credentials. %s attempt(s) left", MAX_FAILED_LOGIN_ATTEMPTS - failedCount));
@@ -81,5 +73,17 @@ public class LoginService {
 
         authMailService.sendTemplatedEmail(jUser.getEmail(), "Login Verification", "mail/login-verification", variables, servletRequest);
         return new MessageBody("A verification link has been sent to your email");
+    }
+
+    private void lockAccount(JUser jUser, JHost host, HttpServletRequest servletRequest) {
+        jUser.setStatus(UserStatus.LOCKED);
+        authRepository.save(jUser);
+        hostEventService.logHostEvent(host, "ACCOUNT_LOCKED : repeated failed login attempts", EventLogStatus.SECURITY, servletRequest);
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("firstName", jUser.getFirstName());
+
+        authMailService.sendTemplatedEmail(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables, servletRequest);
+        throw new ForbiddenException("Account has been locked due to multiple failed logins");
     }
 }
