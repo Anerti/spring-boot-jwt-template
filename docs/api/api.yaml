@@ -84,7 +84,7 @@ paths:
     get:
       operationId: verifyRegistration
       summary: Verify email and activate the account
-      description: Validates the UUID verification token against the pending user record, sets verified=true, and returns a JWT token. The token expires after 15 minutes. This endpoint is also invoked after POST /auth/login and DELETE /users/{userId} (for account deletion confirmation).
+      description: Validates the UUID verification token against the pending user record and returns a JWT token. Consumes tokens from all verification flows: registration (sets verified=true), login, account unlock (sets status back to ACTIVE and resets the failed-login counter), and email change (switches to the new pending address). The token expires after 15 minutes.
       tags: [Auth]
       parameters:
         - name: token
