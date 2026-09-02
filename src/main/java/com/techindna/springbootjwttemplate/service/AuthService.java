@@ -222,12 +222,23 @@ public class AuthService {
             throw new UnprocessableContentException("The new email must be different from the current email");
         }
 
-        if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            if (authRepository.findByEmail(normalizedNewEmail).isPresent()) {
-                throw new ConflictException("Cannot use this email");
-            }
+        if (authRepository.findByEmail(normalizedNewEmail).isPresent()) {
+            throw new ConflictException("Cannot use this email");
+        }
 
-            authMailService.sendChangeEmailConfirmation(jUser.getEmail(), jUser.getFirstName(), normalizedNewEmail, servletRequest);
+        if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
+            String token = UUID.randomUUID().toString();
+            verificationCodeStore.saveToken(jUser.getEmail(), token);
+            verificationCodeStore.savePendingEmail(token, normalizedNewEmail);
+
+            String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("verificationUrl", verificationUrl);
+            variables.put("firstName", jUser.getFirstName());
+            authMailService.addClientData(variables, servletRequest);
+
+            emailService.sendMail(new EmailDetails(normalizedNewEmail, "Confirm your new email address", "mail/change-email", variables));
 
             hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_PENDING : confirmation sent to new address", EventLogStatus.INFO, servletRequest);
             return new MessageBody("A verification link has been sent to your new email address");
