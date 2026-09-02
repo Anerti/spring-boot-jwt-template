@@ -2,7 +2,13 @@ package com.techindna.springbootjwttemplate.service.mail;
 
 import com.techindna.springbootjwttemplate.entity.GeoIpResponse;
 import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
+import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
+import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
+import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
+import com.techindna.springbootjwttemplate.repository.model.JHost;
+import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.GeoIpService;
+import com.techindna.springbootjwttemplate.service.HostEventService;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +31,7 @@ public class AuthMailService {
     private final GeoIpService geoIpService;
     private final VerificationCodeStore verificationCodeStore;
     private final EmailService emailService;
+    private final HostEventService hostEventService;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -60,5 +67,16 @@ public class AuthMailService {
                                    Map<String, Object> vars, HttpServletRequest request) {
         addClientData(vars, request);
         emailService.sendMail(new EmailDetails(email, subject, template, vars));
+    }
+
+    public void requireActiveVerifiedAccount(JHost host, JUser user, String op, HttpServletRequest request) {
+        if (UserStatus.LOCKED == user.getStatus()) {
+            hostEventService.logHostEvent(host, op + "_FAILED : account locked", EventLogStatus.SECURITY, request);
+            throw new ForbiddenException("Account locked");
+        }
+        if (!user.getVerified()) {
+            hostEventService.logHostEvent(host, op + "_FAILED : unverified account", EventLogStatus.SECURITY, request);
+            throw new ForbiddenException("Account has not been verified");
+        }
     }
 }
