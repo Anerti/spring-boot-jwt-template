@@ -330,8 +330,19 @@ public class AuthService {
             throw new ForbiddenException("No pending verification");
         }
 
-        authMailService.sendVerificationLink(normalizedEmail, jUser.getFirstName(), jUser.getLastName(),
-                jUser.getUsername(), "Email Verification", "mail/verification", servletRequest);
+        String token = UUID.randomUUID().toString();
+        verificationCodeStore.saveToken(normalizedEmail, token);
+        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("verificationUrl", verificationUrl);
+        variables.put("firstName", jUser.getFirstName());
+        variables.put("lastName", jUser.getLastName());
+        variables.put("username", jUser.getUsername());
+        variables.put("email", normalizedEmail);
+        authMailService.addClientData(variables, servletRequest);
+
+        emailService.sendMail(new EmailDetails(normalizedEmail, "Email Verification", "mail/verification", variables));
 
         return new MessageBody("A verification link has been sent to your email");
     }
