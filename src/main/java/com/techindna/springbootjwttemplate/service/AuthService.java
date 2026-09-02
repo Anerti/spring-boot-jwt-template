@@ -1,7 +1,6 @@
 package com.techindna.springbootjwttemplate.service;
 
 import com.techindna.springbootjwttemplate.dto.MessageBody;
-import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.entity.User;
 import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
@@ -37,31 +36,6 @@ public class AuthService {
     private final HostEventService hostEventService;
     private final FailedLoginTracker failedLoginTracker;
     private final AuthMailService authMailService;
-
-    @Transactional
-    public MessageBody unlockAccount(UnlockAccountInput request, HttpServletRequest servletRequest) {
-        dataValidator.validateEmail("email", request.getEmail());
-        String normalizedEmail = request.getEmail().strip().toLowerCase();
-        JUser jUser = authRepository.findByEmail(normalizedEmail)
-                .orElseThrow(() -> new ForbiddenException("Account not locked"));
-
-        JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
-        if (jUser.getStatus() != UserStatus.LOCKED) {
-            hostEventService.logHostEvent(userHost, "UNLOCK_FAILED : account not locked", EventLogStatus.WARNING, servletRequest);
-            throw new ForbiddenException("Account not locked");
-        }
-
-        String token = authMailService.generateVerificationToken(jUser.getEmail());
-
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("firstName", jUser.getFirstName());
-        variables.put("verificationUrl", authMailService.verificationUrl(token));
-
-        authMailService.sendTemplatedEmail(jUser.getEmail(), "Account Unlock", "mail/unlock-account", variables, servletRequest);
-
-        hostEventService.logHostEvent(userHost, "UNLOCK_REQUESTED : verification email sent", EventLogStatus.INFO, servletRequest);
-        return new MessageBody("A verification link has been sent to your email to unlock your account");
-    }
 
     @Transactional
     public VerifyRegistrationResponse verify(UUID token, HttpServletRequest servletRequest) {
