@@ -191,7 +191,11 @@ public class AuthService {
         authRepository.save(jUser);
         hostEventService.logHostEvent(userHost, "PASSWORD_CHANGE_SUCCEEDED", EventLogStatus.APPROVED, servletRequest);
 
-        authMailService.sendPasswordChangedNotification(jUser.getEmail(), jUser.getFirstName(), servletRequest);
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("firstName", jUser.getFirstName());
+        authMailService.addClientData(variables, servletRequest);
+
+        emailService.sendMail(new EmailDetails(jUser.getEmail(), "Password Changed", "mail/password-change", variables));
 
         return new MessageBody("Password changed successfully");
     }
