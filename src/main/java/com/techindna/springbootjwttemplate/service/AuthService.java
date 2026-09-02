@@ -1,15 +1,14 @@
 package com.techindna.springbootjwttemplate.service;
 
-import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
 import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
-import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.entity.User;
-import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
+import com.techindna.springbootjwttemplate.entity.enums.EventLogStatus;
+import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
@@ -19,12 +18,10 @@ import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
-import com.techindna.springbootjwttemplate.service.mail.EmailService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
 import com.techindna.springbootjwttemplate.validator.AuthValidator;
-import com.techindna.springbootjwttemplate.entity.enums.UserStatus;
 import com.techindna.springbootjwttemplate.security.jwt.JwtTokenProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -32,8 +29,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,49 +45,12 @@ public class AuthService {
     private final AuthValidator authValidator;
     private final DataValidator dataValidator;
     private final PasswordEncoder passwordEncoder;
-    private final AuthMailService authMailService;
     private final VerificationCodeStore verificationCodeStore;
     private final JwtTokenProvider jwtTokenProvider;
     private final GeoIpService geoIpService;
     private final HostEventService hostEventService;
     private final FailedLoginTracker failedLoginTracker;
-    private final EmailService emailService;
-
-    @Value("${app.base-url}")
-    private String baseUrl;
-
-    @Transactional
-    public MessageBody register(RegisterInput request, HttpServletRequest servletRequest) {
-        authValidator.validateRegistration(request);
-        String encodedPassword = passwordEncoder.encode(request.getPassword());
-        String email = request.getEmail().strip().toLowerCase();
-
-        try {
-            authRepository.saveAndFlush(userMapper.toEntity(request, encodedPassword));
-        } catch (DataIntegrityViolationException e) {
-            String constraint = e.getMostSpecificCause().getMessage();
-            if (constraint != null && constraint.contains("email")) {
-                throw new ConflictException("You cannot use this email address");
-            }
-            if (constraint != null && constraint.contains("username")) {
-                throw new ConflictException("You cannot use this username");
-            }
-            throw e;
-        }
-
-        String token = generateVerificationToken(email);
-
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("verificationUrl", verificationUrl(token));
-        variables.put("firstName", request.getFirstName().strip());
-        variables.put("lastName", request.getLastName().strip());
-        variables.put("username", request.getUsername().strip());
-        variables.put("email", email);
-
-        sendTemplatedEmail(email, "Email Verification", "mail/verification", variables, servletRequest);
-
-        return new MessageBody("An email has been sent to verify your account");
-    }
+    private final AuthMailService authMailService;
 
     @Transactional(noRollbackFor = {ForbiddenException.class, UnauthorizedException.class})
     public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
@@ -108,15 +66,15 @@ public class AuthService {
 
         requireActiveVerifiedAccount(host, jUser, "LOGIN", servletRequest);
 
-        String token = generateVerificationToken(jUser.getEmail());
+        String token = authMailService.generateVerificationToken(jUser.getEmail());
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
             hostEventService.logHostEvent(host, "LOGIN_SUCCESS : verification link sent", EventLogStatus.APPROVED, servletRequest);
 
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", jUser.getFirstName());
-            variables.put("verificationUrl", verificationUrl(token));
+            variables.put("verificationUrl", authMailService.verificationUrl(token));
 
-            sendTemplatedEmail(jUser.getEmail(), "Login Verification", "mail/login-verification", variables, servletRequest);
+            authMailService.sendTemplatedEmail(jUser.getEmail(), "Login Verification", "mail/login-verification", variables, servletRequest);
             return new MessageBody("A verification link has been sent to your email");
         }
 
@@ -131,7 +89,7 @@ public class AuthService {
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", jUser.getFirstName());
 
-            sendTemplatedEmail(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables, servletRequest);
+            authMailService.sendTemplatedEmail(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables, servletRequest);
             throw new ForbiddenException("Account has been locked due to multiple failed logins");
         }
 
@@ -166,7 +124,7 @@ public class AuthService {
         Map<String, Object> variables = new HashMap<>();
         variables.put("firstName", jUser.getFirstName());
 
-        sendTemplatedEmail(jUser.getEmail(), "Password Changed", "mail/password-change", variables, servletRequest);
+        authMailService.sendTemplatedEmail(jUser.getEmail(), "Password Changed", "mail/password-change", variables, servletRequest);
 
         return new MessageBody("Password changed successfully");
     }
@@ -196,14 +154,14 @@ public class AuthService {
         }
 
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
-            String token = generateVerificationToken(jUser.getEmail());
+            String token = authMailService.generateVerificationToken(jUser.getEmail());
             verificationCodeStore.savePendingEmail(token, normalizedNewEmail);
 
             Map<String, Object> variables = new HashMap<>();
-            variables.put("verificationUrl", verificationUrl(token));
+            variables.put("verificationUrl", authMailService.verificationUrl(token));
             variables.put("firstName", jUser.getFirstName());
 
-            sendTemplatedEmail(normalizedNewEmail, "Confirm your new email address", "mail/change-email", variables, servletRequest);
+            authMailService.sendTemplatedEmail(normalizedNewEmail, "Confirm your new email address", "mail/change-email", variables, servletRequest);
 
             hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_PENDING : confirmation sent to new address", EventLogStatus.INFO, servletRequest);
             return new MessageBody("A verification link has been sent to your new email address");
@@ -226,13 +184,13 @@ public class AuthService {
             throw new ForbiddenException("Account not locked");
         }
 
-        String token = generateVerificationToken(jUser.getEmail());
+        String token = authMailService.generateVerificationToken(jUser.getEmail());
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("firstName", jUser.getFirstName());
-        variables.put("verificationUrl", verificationUrl(token));
+        variables.put("verificationUrl", authMailService.verificationUrl(token));
 
-        sendTemplatedEmail(jUser.getEmail(), "Account Unlock", "mail/unlock-account", variables, servletRequest);
+        authMailService.sendTemplatedEmail(jUser.getEmail(), "Account Unlock", "mail/unlock-account", variables, servletRequest);
 
         hostEventService.logHostEvent(userHost, "UNLOCK_REQUESTED : verification email sent", EventLogStatus.INFO, servletRequest);
         return new MessageBody("A verification link has been sent to your email to unlock your account");
@@ -292,34 +250,18 @@ public class AuthService {
             throw new ForbiddenException("No pending verification");
         }
 
-        String token = generateVerificationToken(normalizedEmail);
+        String token = authMailService.generateVerificationToken(normalizedEmail);
 
         Map<String, Object> variables = new HashMap<>();
-        variables.put("verificationUrl", verificationUrl(token));
+        variables.put("verificationUrl", authMailService.verificationUrl(token));
         variables.put("firstName", jUser.getFirstName());
         variables.put("lastName", jUser.getLastName());
         variables.put("username", jUser.getUsername());
         variables.put("email", normalizedEmail);
 
-        sendTemplatedEmail(normalizedEmail, "Email Verification", "mail/verification", variables, servletRequest);
+        authMailService.sendTemplatedEmail(normalizedEmail, "Email Verification", "mail/verification", variables, servletRequest);
 
         return new MessageBody("A verification link has been sent to your email");
-    }
-
-    private String generateVerificationToken(String email) {
-        String token = UUID.randomUUID().toString();
-        verificationCodeStore.saveToken(email, token);
-        return token;
-    }
-
-    private String verificationUrl(String token) {
-        return String.format("%s/auth/verification/%s", baseUrl, token);
-    }
-
-    private void sendTemplatedEmail(String email, String subject, String template,
-                                    Map<String, Object> vars, HttpServletRequest request) {
-        authMailService.addClientData(vars, request);
-        emailService.sendMail(new EmailDetails(email, subject, template, vars));
     }
 
     private void requireActiveVerifiedAccount(JHost host, JUser user, String op, HttpServletRequest request) {
@@ -334,7 +276,7 @@ public class AuthService {
     }
 
     private JUser getAuthenticatedUser() {
-        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
+        String userId = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
         return authRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
     }
