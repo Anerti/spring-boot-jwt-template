@@ -5,7 +5,7 @@ import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.mapper.UserMapper;
 import com.techindna.springbootjwttemplate.repository.AuthRepository;
-import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
+import com.techindna.springbootjwttemplate.service.auth.AuthService;
 import com.techindna.springbootjwttemplate.validator.AuthValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +25,7 @@ public class RegisterService {
     private final UserMapper userMapper;
     private final AuthValidator authValidator;
     private final PasswordEncoder passwordEncoder;
-    private final AuthMailService authMailService;
+    private final AuthService authService;
 
     @Transactional
     public MessageBody register(RegisterInput request, HttpServletRequest servletRequest) {
@@ -46,16 +46,16 @@ public class RegisterService {
             throw e;
         }
 
-        String token = authMailService.generateVerificationToken(email);
+        String token = authService.generateVerificationToken(email);
 
         Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("verificationUrl", authMailService.verificationUrl(token));
+        variables.put("verificationUrl", authService.verificationUrl(token));
         variables.put("firstName", request.getFirstName().strip());
         variables.put("lastName", request.getLastName().strip());
         variables.put("username", request.getUsername().strip());
         variables.put("email", email);
 
-        authMailService.sendTemplatedEmail(email, "Email Verification", "mail/verification", variables, servletRequest);
+        authService.sendTemplatedEmail(email, "Email Verification", "mail/verification", variables, servletRequest);
 
         return new MessageBody("An email has been sent to verify your account");
     }

@@ -7,11 +7,11 @@ import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
-import com.techindna.springbootjwttemplate.service.AuthService;
 import com.techindna.springbootjwttemplate.service.auth.ChangeEmailService;
 import com.techindna.springbootjwttemplate.service.auth.ChangePasswordService;
 import com.techindna.springbootjwttemplate.service.auth.LoginService;
 import com.techindna.springbootjwttemplate.service.auth.RegisterService;
+import com.techindna.springbootjwttemplate.service.auth.ResendVerificationService;
 import com.techindna.springbootjwttemplate.service.auth.UnlockAccountService;
 import com.techindna.springbootjwttemplate.service.auth.VerificationService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,7 +34,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final AuthService authService;
+    private final ResendVerificationService resendVerificationService;
     private final RegisterService registerService;
     private final LoginService loginService;
     private final ChangePasswordService changePasswordService;
@@ -62,7 +62,7 @@ public class AuthController {
     public ResponseEntity<MessageBody> resendVerificationLink(
             @RequestParam String email, HttpServletRequest servletRequest) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(authService.resendVerificationLink(email, servletRequest));
+                .body(resendVerificationService.resendVerificationLink(email, servletRequest));
     }
 
     @PostMapping("/change-password")

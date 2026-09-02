@@ -1,4 +1,4 @@
-package com.techindna.springbootjwttemplate.service.mail;
+package com.techindna.springbootjwttemplate.service.auth;
 
 import com.techindna.springbootjwttemplate.entity.GeoIpResponse;
 import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
@@ -11,6 +11,7 @@ import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.GeoIpService;
 import com.techindna.springbootjwttemplate.service.HostEventService;
+import com.techindna.springbootjwttemplate.service.mail.EmailService;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +28,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class AuthMailService {
+public class AuthService {
 
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);

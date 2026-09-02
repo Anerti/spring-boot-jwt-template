@@ -10,7 +10,7 @@ import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.HostEventService;
-import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
+import com.techindna.springbootjwttemplate.service.auth.AuthService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
 import com.techindna.springbootjwttemplate.validator.AuthValidator;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,7 +33,7 @@ public class LoginService {
     private final PasswordEncoder passwordEncoder;
     private final HostEventService hostEventService;
     private final FailedLoginTracker failedLoginTracker;
-    private final AuthMailService authMailService;
+    private final AuthService authService;
 
     @Transactional(noRollbackFor = {ForbiddenException.class, UnauthorizedException.class})
     public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {
@@ -47,9 +47,9 @@ public class LoginService {
 
         JHost host = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
 
-        authMailService.requireActiveVerifiedAccount(host, jUser, "LOGIN", servletRequest);
+        authService.requireActiveVerifiedAccount(host, jUser, "LOGIN", servletRequest);
 
-        String token = authMailService.generateVerificationToken(jUser.getEmail());
+        String token = authService.generateVerificationToken(jUser.getEmail());
         if (passwordEncoder.matches(request.getPassword(), jUser.getPassword())) {
             return sendLoginVerification(jUser, host, token, servletRequest);
         }
@@ -69,9 +69,9 @@ public class LoginService {
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("firstName", jUser.getFirstName());
-        variables.put("verificationUrl", authMailService.verificationUrl(token));
+        variables.put("verificationUrl", authService.verificationUrl(token));
 
-        authMailService.sendTemplatedEmail(jUser.getEmail(), "Login Verification", "mail/login-verification", variables, servletRequest);
+        authService.sendTemplatedEmail(jUser.getEmail(), "Login Verification", "mail/login-verification", variables, servletRequest);
         return new MessageBody("A verification link has been sent to your email");
     }
 
@@ -83,7 +83,7 @@ public class LoginService {
         Map<String, Object> variables = new HashMap<>();
         variables.put("firstName", jUser.getFirstName());
 
-        authMailService.sendTemplatedEmail(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables, servletRequest);
+        authService.sendTemplatedEmail(jUser.getEmail(), "Security Alert: Your account has been locked", "mail/account-locked", variables, servletRequest);
         throw new ForbiddenException("Account has been locked due to multiple failed logins");
     }
 }

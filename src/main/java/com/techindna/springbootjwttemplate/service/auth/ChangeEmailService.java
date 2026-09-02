@@ -13,7 +13,7 @@ import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.ABACRulesService;
 import com.techindna.springbootjwttemplate.service.HostEventService;
-import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
+import com.techindna.springbootjwttemplate.service.auth.AuthService;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import com.techindna.springbootjwttemplate.validator.AuthValidator;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,11 +36,11 @@ public class ChangeEmailService {
     private final PasswordEncoder passwordEncoder;
     private final HostEventService hostEventService;
     private final VerificationCodeStore verificationCodeStore;
-    private final AuthMailService authMailService;
+    private final AuthService authService;
 
     @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
     public MessageBody changeEmail(ChangeEmailInput request, HttpServletRequest servletRequest, Authentication auth) {
-        JUser jUser = authMailService.getAuthenticatedUser();
+        JUser jUser = authService.getAuthenticatedUser();
 
         abacRulesService.enforceIpBinding(auth, servletRequest);
         JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
@@ -71,14 +71,14 @@ public class ChangeEmailService {
     }
 
     private MessageBody sendConfirmationEmail(JUser jUser, JHost userHost, String newEmail, HttpServletRequest servletRequest) {
-        String token = authMailService.generateVerificationToken(jUser.getEmail());
+        String token = authService.generateVerificationToken(jUser.getEmail());
         verificationCodeStore.savePendingEmail(token, newEmail);
 
         Map<String, Object> variables = new HashMap<>();
-        variables.put("verificationUrl", authMailService.verificationUrl(token));
+        variables.put("verificationUrl", authService.verificationUrl(token));
         variables.put("firstName", jUser.getFirstName());
 
-        authMailService.sendTemplatedEmail(newEmail, "Confirm your new email address", "mail/change-email", variables, servletRequest);
+        authService.sendTemplatedEmail(newEmail, "Confirm your new email address", "mail/change-email", variables, servletRequest);
 
         hostEventService.logHostEvent(userHost, "EMAIL_CHANGE_PENDING : confirmation sent to new address", EventLogStatus.INFO, servletRequest);
         return new MessageBody("A verification link has been sent to your new email address");

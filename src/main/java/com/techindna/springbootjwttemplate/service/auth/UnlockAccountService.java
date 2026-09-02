@@ -9,7 +9,7 @@ import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.HostEventService;
-import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
+import com.techindna.springbootjwttemplate.service.auth.AuthService;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ public class UnlockAccountService {
     private final AuthRepository authRepository;
     private final DataValidator dataValidator;
     private final HostEventService hostEventService;
-    private final AuthMailService authMailService;
+    private final AuthService authService;
 
     @Transactional
     public MessageBody unlockAccount(UnlockAccountInput request, HttpServletRequest servletRequest) {
@@ -41,13 +41,13 @@ public class UnlockAccountService {
             throw new ForbiddenException("Account not locked");
         }
 
-        String token = authMailService.generateVerificationToken(jUser.getEmail());
+        String token = authService.generateVerificationToken(jUser.getEmail());
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("firstName", jUser.getFirstName());
-        variables.put("verificationUrl", authMailService.verificationUrl(token));
+        variables.put("verificationUrl", authService.verificationUrl(token));
 
-        authMailService.sendTemplatedEmail(jUser.getEmail(), "Account Unlock", "mail/unlock-account", variables, servletRequest);
+        authService.sendTemplatedEmail(jUser.getEmail(), "Account Unlock", "mail/unlock-account", variables, servletRequest);
 
         hostEventService.logHostEvent(userHost, "UNLOCK_REQUESTED : verification email sent", EventLogStatus.INFO, servletRequest);
         return new MessageBody("A verification link has been sent to your email to unlock your account");

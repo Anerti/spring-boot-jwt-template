@@ -11,7 +11,7 @@ import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.ABACRulesService;
 import com.techindna.springbootjwttemplate.service.HostEventService;
-import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
+import com.techindna.springbootjwttemplate.service.auth.AuthService;
 import com.techindna.springbootjwttemplate.validator.AuthValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -32,16 +32,16 @@ public class ChangePasswordService {
     private final AuthValidator authValidator;
     private final PasswordEncoder passwordEncoder;
     private final HostEventService hostEventService;
-    private final AuthMailService authMailService;
+    private final AuthService authService;
 
     @Transactional(noRollbackFor = {UnprocessableContentException.class, ForbiddenException.class, UnauthorizedException.class})
     public MessageBody changePassword(ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
-        JUser jUser = authMailService.getAuthenticatedUser();
+        JUser jUser = authService.getAuthenticatedUser();
 
         abacRulesService.enforceIpBinding(auth, servletRequest);
         JHost userHost = hostEventService.recordHostAndCheckBan(jUser, servletRequest);
 
-        authMailService.requireActiveVerifiedAccount(userHost, jUser, "PASSWORD_CHANGE", servletRequest);
+        authService.requireActiveVerifiedAccount(userHost, jUser, "PASSWORD_CHANGE", servletRequest);
 
         authValidator.validateChangePassword(request);
 
@@ -62,7 +62,7 @@ public class ChangePasswordService {
         Map<String, Object> variables = new HashMap<>();
         variables.put("firstName", jUser.getFirstName());
 
-        authMailService.sendTemplatedEmail(jUser.getEmail(), "Password Changed", "mail/password-change", variables, servletRequest);
+        authService.sendTemplatedEmail(jUser.getEmail(), "Password Changed", "mail/password-change", variables, servletRequest);
 
         return new MessageBody("Password changed successfully");
     }
