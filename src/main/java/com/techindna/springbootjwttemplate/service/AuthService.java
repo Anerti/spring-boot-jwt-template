@@ -5,9 +5,11 @@ import com.techindna.springbootjwttemplate.dto.ChangeEmailInput;
 import com.techindna.springbootjwttemplate.dto.ChangePasswordInput;
 import com.techindna.springbootjwttemplate.dto.LoginInput;
 import com.techindna.springbootjwttemplate.dto.MessageBody;
+import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.entity.User;
+import com.techindna.springbootjwttemplate.entity.email.EmailDetails;
 import com.techindna.springbootjwttemplate.exception.http.ConflictException;
 import com.techindna.springbootjwttemplate.exception.http.ForbiddenException;
 import com.techindna.springbootjwttemplate.exception.http.UnauthorizedException;
@@ -17,6 +19,7 @@ import com.techindna.springbootjwttemplate.repository.AuthRepository;
 import com.techindna.springbootjwttemplate.repository.model.JHost;
 import com.techindna.springbootjwttemplate.repository.model.JUser;
 import com.techindna.springbootjwttemplate.service.mail.AuthMailService;
+import com.techindna.springbootjwttemplate.service.mail.EmailService;
 import com.techindna.springbootjwttemplate.service.redis.FailedLoginTracker;
 import com.techindna.springbootjwttemplate.service.redis.VerificationCodeStore;
 import com.techindna.springbootjwttemplate.validator.DataValidator;
@@ -29,6 +32,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +56,48 @@ public class AuthService {
     private final GeoIpService geoIpService;
     private final HostEventService hostEventService;
     private final FailedLoginTracker failedLoginTracker;
+    private final EmailService emailService;
+
+    @Value("${app.base-url}")
+    private String baseUrl;
+
+    @Transactional
+    public MessageBody register(RegisterInput request, HttpServletRequest servletRequest) {
+        authValidator.validateRegistration(request);
+        String encodedPassword = passwordEncoder.encode(request.getPassword());
+        String email = request.getEmail().strip().toLowerCase();
+
+        try {
+            authRepository.saveAndFlush(userMapper.toEntity(request, encodedPassword));
+        } catch (DataIntegrityViolationException e) {
+            String constraint = e.getMostSpecificCause().getMessage();
+            if (constraint != null && constraint.contains("email")) {
+                throw new ConflictException("You cannot use this email address");
+            }
+            if (constraint != null && constraint.contains("username")) {
+                throw new ConflictException("You cannot use this username");
+            }
+            throw e;
+        }
+
+        String token = UUID.randomUUID().toString();
+        verificationCodeStore.saveToken(email, token);
+
+        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("verificationUrl", verificationUrl);
+        variables.put("firstName", request.getFirstName().strip());
+        variables.put("lastName", request.getLastName().strip());
+        variables.put("username", request.getUsername().strip());
+        variables.put("email", email);
+
+        authMailService.addClientData(variables, servletRequest);
+
+        emailService.sendMail(new EmailDetails(email, "Email Verification", "mail/verification", variables));
+
+        return new MessageBody("An email has been sent to verify your account");
+    }
 
     @Transactional(noRollbackFor = {ForbiddenException.class, UnauthorizedException.class})
     public MessageBody login(LoginInput request, HttpServletRequest servletRequest) {

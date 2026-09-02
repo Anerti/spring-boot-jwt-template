@@ -8,7 +8,6 @@ import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
 import com.techindna.springbootjwttemplate.service.AuthService;
-import com.techindna.springbootjwttemplate.service.auth.RegisterService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -30,11 +29,10 @@ import java.util.UUID;
 public class AuthController {
 
     private final AuthService authService;
-    private final RegisterService registerService;
 
     @PostMapping("/register")
     public ResponseEntity<MessageBody> register(@RequestBody RegisterInput request, HttpServletRequest servletRequest) {
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(registerService.register(request, servletRequest));
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(authService.register(request, servletRequest));
     }
 
     @PostMapping("/login")
