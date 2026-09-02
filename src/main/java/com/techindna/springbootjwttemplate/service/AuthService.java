@@ -261,8 +261,16 @@ public class AuthService {
             throw new ForbiddenException("Account not locked");
         }
 
-        authMailService.sendVerificationLink(jUser.getEmail(), jUser.getFirstName(), jUser.getLastName(),
-                jUser.getUsername(), "Account Unlock", "mail/unlock-account", servletRequest);
+        String token = UUID.randomUUID().toString();
+        verificationCodeStore.saveToken(jUser.getEmail(), token);
+        String verificationUrl = String.format("%s/auth/verification/%s", baseUrl, token);
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("firstName", jUser.getFirstName());
+        variables.put("verificationUrl", verificationUrl);
+        authMailService.addClientData(variables, servletRequest);
+
+        emailService.sendMail(new EmailDetails(jUser.getEmail(), "Account Unlock", "mail/unlock-account", variables));
 
         hostEventService.logHostEvent(userHost, "UNLOCK_REQUESTED : verification email sent", EventLogStatus.INFO, servletRequest);
         return new MessageBody("A verification link has been sent to your email to unlock your account");
