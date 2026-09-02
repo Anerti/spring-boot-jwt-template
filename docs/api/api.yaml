@@ -192,8 +192,11 @@ paths:
   /auth/resend-link:
     post:
       operationId: resendVerificationLink
-      summary: Resend verification link
-      description: Generates a new UUID verification token and sends a verification link by email. Use this when the previous token expired or was not received. The token expires after 15 minutes. Complete verification via GET /auth/verification/{token}.
+      summary: Resend verification email
+      description: >-
+        Generates a new UUID verification token and sends a verification email
+        for the given flow. The token expires after 15 minutes. Complete the
+        flow via GET /auth/verification/{token}.
       tags: [Auth]
       parameters:
         - name: email
@@ -203,29 +206,67 @@ paths:
             type: string
             format: email
             maxLength: 100
-          description: Email address of the account to resend the verification link to
+          description: Email address of the account
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [login, unlock-account, change-email, change-password]
+          description: >-
+            Which verification flow to resend. When omitted, defaults to
+            registration verification.
       responses:
         '202':
-          description: Verification link regenerated and sent by email
+          description: Verification email regenerated and sent
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageBody'
-              example:
-                message: A verification link has been sent to your email
+              examples:
+                registration:
+                  summary: Registration verification resent
+                  value:
+                    message: A verification link has been sent to your email
+                login:
+                  summary: Login verification resent
+                  value:
+                    message: A verification link has been sent to your email
+                unlockAccount:
+                  summary: Unlock-account link resent
+                  value:
+                    message: A verification link has been sent to your email to unlock your account
+                changeEmail:
+                  summary: Change-email confirmation resent
+                  value:
+                    message: A verification link has been sent to your new email address
+                changePassword:
+                  summary: Change-password notification resent
+                  value:
+                    message: A verification link has been sent to your email
         '422':
           description: Email format validation failure
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
-              example:
-                status: 422
-                error: Unprocessable Entity
-                message: Email must be a valid email address
-                timestamp: 2026-07-20T15:00:00Z
+              examples:
+                emailInvalid:
+                  summary: Email format invalid
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: Email must be a valid email address
+                    timestamp: 2026-07-20T15:00:00Z
+                invalidFlow:
+                  summary: Unknown flow value
+                  value:
+                    status: 422
+                    error: Unprocessable Entity
+                    message: Unknown flow value
+                    timestamp: 2026-07-20T15:00:00Z
         '403':
-          description: Email not found or account already verified
+          description: No pending verification found for this email and flow
           content:
             application/json:
               schema:

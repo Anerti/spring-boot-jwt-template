@@ -7,8 +7,13 @@ import com.techindna.springbootjwttemplate.dto.MessageBody;
 import com.techindna.springbootjwttemplate.dto.RegisterInput;
 import com.techindna.springbootjwttemplate.dto.UnlockAccountInput;
 import com.techindna.springbootjwttemplate.dto.VerifyRegistrationResponse;
-import com.techindna.springbootjwttemplate.service.AuthService;
+import com.techindna.springbootjwttemplate.service.auth.ChangeEmailService;
+import com.techindna.springbootjwttemplate.service.auth.ChangePasswordService;
+import com.techindna.springbootjwttemplate.service.auth.LoginService;
 import com.techindna.springbootjwttemplate.service.auth.RegisterService;
+import com.techindna.springbootjwttemplate.service.auth.ResendVerificationService;
+import com.techindna.springbootjwttemplate.service.auth.UnlockAccountService;
+import com.techindna.springbootjwttemplate.service.auth.VerificationService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -29,8 +34,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final AuthService authService;
+    private final ResendVerificationService resendVerificationService;
     private final RegisterService registerService;
+    private final LoginService loginService;
+    private final ChangePasswordService changePasswordService;
+    private final ChangeEmailService changeEmailService;
+    private final UnlockAccountService unlockAccountService;
+    private final VerificationService verificationService;
 
     @PostMapping("/register")
     public ResponseEntity<MessageBody> register(@RequestBody RegisterInput request, HttpServletRequest servletRequest) {
@@ -39,40 +49,40 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<MessageBody> login(@RequestBody LoginInput request, HttpServletRequest servletRequest) {
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(authService.login(request, servletRequest));
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(loginService.login(request, servletRequest));
     }
 
     @GetMapping("/verification/{token}")
     public ResponseEntity<VerifyRegistrationResponse> verify(
             @PathVariable UUID token, HttpServletRequest servletRequest) {
-        return ResponseEntity.status(HttpStatus.OK).body(authService.verify(token, servletRequest));
+        return ResponseEntity.status(HttpStatus.OK).body(verificationService.verify(token, servletRequest));
     }
 
     @PostMapping("/resend-link")
     public ResponseEntity<MessageBody> resendVerificationLink(
             @RequestParam String email, HttpServletRequest servletRequest) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(authService.resendVerificationLink(email, servletRequest));
+                .body(resendVerificationService.resendVerificationLink(email, servletRequest));
     }
 
     @PostMapping("/change-password")
     public ResponseEntity<MessageBody> changePassword(
             @RequestBody ChangePasswordInput request, HttpServletRequest servletRequest, Authentication auth) {
         return ResponseEntity.status(HttpStatus.OK)
-                .body(authService.changePassword(request, servletRequest, auth));
+                .body(changePasswordService.changePassword(request, servletRequest, auth));
     }
 
     @PostMapping("/change-email")
     public ResponseEntity<MessageBody> changeEmail(
             @RequestBody ChangeEmailInput request, HttpServletRequest servletRequest, Authentication auth) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(authService.changeEmail(request, servletRequest, auth));
+                .body(changeEmailService.changeEmail(request, servletRequest, auth));
     }
 
     @PostMapping("/unlock")
     public ResponseEntity<MessageBody> unlockAccount(
             @RequestBody UnlockAccountInput request, HttpServletRequest servletRequest) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(authService.unlockAccount(request, servletRequest));
+                .body(unlockAccountService.unlockAccount(request, servletRequest));
     }
 }
